@@ -227,13 +227,13 @@ class Generator(nn.Module):
         # 将对话状态输入GCN, 输出 slot_node [1,30,1024], dialogue_node [1,1,1024]
         slot_node, imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask) # # Implicit Mention Oriented Reasoning _:[1,30,1024] imor_output:[1,1,1024]
 # ====================新增=============================================================
-        # todo: 对比学习, 对 second_edge_mask 与 fourth_edge_mask 做随机边删除
-        for i in range(first_edge_mask.shape[0]):
-            first_edge_mask[i] = self.weighted_random_dropout_adj(state_output, first_edge_mask[i])
-            fourth_edge_mask[i] = self.weighted_random_dropout_adj(start_output, fourth_edge_mask[i]);
-        another_slot_node, another_imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask)
-        cl_loss = self.loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
-# ====================================================
+#         # todo: 对比学习, 对 second_edge_mask 与 fourth_edge_mask 做随机边删除
+#         for i in range(first_edge_mask.shape[0]):
+#             first_edge_mask[i] = self.weighted_random_dropout_adj(state_output, first_edge_mask[i])
+#             fourth_edge_mask[i] = self.weighted_random_dropout_adj(start_output, fourth_edge_mask[i]);
+#         another_slot_node, another_imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask)
+#         cl_loss = self.loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
+# # ====================================================
         slot_text = self.slot_gate(sequence_output, state_output, slot_mask)    # Slot Name - Dialogue History 槽位-对话历史 [1,1,30,1024]
         history_text = self.history_gate(pooled_output)                         # Current Turn - Dialogue History 当前回合-对话历史 [1024]
 

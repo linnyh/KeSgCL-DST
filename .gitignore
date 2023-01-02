@@ -3,6 +3,7 @@
 *dev_dials*.json
 *test_dials*.json
 *mini.h5
+utils/slot_knowledge_emb.json
 
 # pretrained_models
 /pretrained_models/albert_large/*
