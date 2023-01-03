@@ -67,9 +67,13 @@ class Generator(nn.Module):
         self.layernorm = torch.nn.LayerNorm(self.hidden_size)
         self.albert = torch.nn.DataParallel(self.albert, device_ids=[0, 1])             # 编码器
         self.gcn = MultiRelationalGCN(self.hidden_size, layer_nums=2, relation_type=4)  # 多关系卷积网络
+        # self.gcn1  = MultiRelationalGCN(self.hidden_size, layer_nums=2, relation_type=4)
 
         # 图对比学习模块
         self.grace = Model(Encoder, self.hidden_size, self.hidden_size)
+        self.fc1 = torch.nn.Linear(self.hidden_size, self.hidden_size)
+        self.fc2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
+        self.tau = 0.5
 
     def init_ans_vocab(self, ans_vocab):
         slot_ans_size = ans_vocab.size(1)
@@ -99,6 +103,66 @@ class Generator(nn.Module):
         ans_vocab_encoded = ans_vocab_encoded.reshape(-1, slot_ans_size, self.hidden_size)
         init_vocab.data.copy_(ans_vocab_encoded)
 
+    def projection(self, z: torch.Tensor) -> torch.Tensor:
+        z = F.elu(self.fc1(z))
+        return self.fc2(z)
+
+    def sim(self, z1: torch.Tensor, z2: torch.Tensor):
+        z1 = F.normalize(z1)
+        z2 = F.normalize(z2)
+        return torch.mm(z1, z2.t())
+
+    def semi_loss(self, z1: torch.Tensor, z2: torch.Tensor):  # 损失输入为两个特征矩阵
+        f = lambda x: torch.exp(x / self.tau)
+        refl_sim = f(self.sim(z1, z1))
+        between_sim = f(self.sim(z1, z2))
+
+        return -torch.log(
+            between_sim.diag()
+            / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
+
+    def batched_semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
+                          batch_size: int):
+        # Space complexity: O(BN) (semi_loss: O(N^2))
+        z1 = z1.view(z1.shape[0]*z1.shape[1], -1)
+        z2 = z2.view(z2.shape[0]*z2.shape[1], -1)
+
+        device = z1.device
+        num_nodes = z1.size(0)
+        num_batches = (num_nodes - 1) // batch_size + 1
+        f = lambda x: torch.exp(x / self.tau)
+        indices = torch.arange(0, num_nodes).to(device)
+        losses = []
+
+        for i in range(num_batches):
+            mask = indices[i * batch_size:(i + 1) * batch_size]
+            refl_sim = f(self.sim(z1[mask], z1))  # [B, N]
+            between_sim = f(self.sim(z1[mask], z2))  # [B, N]
+
+            losses.append(-torch.log(
+                between_sim[:, i * batch_size:(i + 1) * batch_size].diag()
+                / (refl_sim.sum(1) + between_sim.sum(1)
+                   - refl_sim[:, i * batch_size:(i + 1) * batch_size].diag())))
+
+        return torch.cat(losses)
+
+    def loss(self, z1: torch.Tensor, z2: torch.Tensor,
+             mean: bool = True, batch_size: int = 0):  # 对比损失
+        h1 = self.projection(z1)
+        h2 = self.projection(z2)
+
+        if batch_size == 0:
+            l1 = self.semi_loss(h1, h2)
+            l2 = self.semi_loss(h2, h1)
+        else:
+            l1 = self.batched_semi_loss(h1, h2, batch_size)
+            l2 = self.batched_semi_loss(h2, h1, batch_size)
+
+        ret = (l1 + l2) * 0.5
+        ret = ret.mean() if mean else ret.sum()
+
+        return ret
+
 
     # 加权随机算法
     def a_res(self, samples, m):
@@ -126,6 +190,8 @@ class Generator(nn.Module):
         :coo_adj: 节点的邻接矩阵
         :p: 想要去掉的边数所占总边数的占比
         '''
+        coo_adj = coo_adj.clone().detach()
+        x = x.cpu().clone().detach()
         idx = torch.nonzero(coo_adj).T
         # 首先获取节节点的数量
         n = coo_adj.shape[0]
@@ -147,60 +213,6 @@ class Generator(nn.Module):
             coo_adj[b][a] = 0
         # 返回删除边后的邻接矩阵
         return coo_adj
-
-    def projection(self, z: torch.Tensor) -> torch.Tensor:
-        z = F.elu(self.fc1(z))
-        return self.fc2(z)
-
-    def semi_loss(self, z1: torch.Tensor, z2: torch.Tensor):  # 损失输入为两个特征矩阵
-        f = lambda x: torch.exp(x / self.tau)
-        refl_sim = f(self.sim(z1, z1))
-        between_sim = f(self.sim(z1, z2))
-
-        return -torch.log(
-            between_sim.diag()
-            / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
-
-    def batched_semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
-                          batch_size: int):
-        # Space complexity: O(BN) (semi_loss: O(N^2))
-        device = z1.device
-        num_nodes = z1.size(0)
-        num_batches = (num_nodes - 1) // batch_size + 1
-        f = lambda x: torch.exp(x / self.tau)
-        indices = torch.arange(0, num_nodes).to(device)
-        losses = []
-
-        for i in range(num_batches):
-            mask = indices[i * batch_size:(i + 1) * batch_size]
-            refl_sim = f(self.sim(z1[mask], z1))  # [B, N]
-            between_sim = f(self.sim(z1[mask], z2))  # [B, N]
-
-            losses.append(-torch.log(
-                between_sim[:, i * batch_size:(i + 1) * batch_size].diag()
-                / (refl_sim.sum(1) + between_sim.sum(1)
-                   - refl_sim[:, i * batch_size:(i + 1) * batch_size].diag())))
-
-        return torch.cat(losses)
-
-
-    def loss(self, z1: torch.Tensor, z2: torch.Tensor,
-             mean: bool = True, batch_size: int = 0):  # 对比损失
-        h1 = self.projection(z1)
-        h2 = self.projection(z2)
-
-        if batch_size == 0:
-            l1 = self.semi_loss(h1, h2)
-            l2 = self.semi_loss(h2, h1)
-        else:
-            l1 = self.batched_semi_loss(h1, h2, batch_size)
-            l2 = self.batched_semi_loss(h2, h1, batch_size)
-
-        ret = (l1 + l2) * 0.5
-        ret = ret.mean() if mean else ret.sum()
-
-        return ret
-
 
     def forward(self, input_ids, token_type_ids,
                 state_positions, attention_mask, slot_mask, first_edge_mask, second_edge_mask, third_edge_mask,
@@ -227,13 +239,19 @@ class Generator(nn.Module):
         # 将对话状态输入GCN, 输出 slot_node [1,30,1024], dialogue_node [1,1,1024]
         slot_node, imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask) # # Implicit Mention Oriented Reasoning _:[1,30,1024] imor_output:[1,1,1024]
 # ====================新增=============================================================
-#         # todo: 对比学习, 对 second_edge_mask 与 fourth_edge_mask 做随机边删除
-#         for i in range(first_edge_mask.shape[0]):
-#             first_edge_mask[i] = self.weighted_random_dropout_adj(state_output, first_edge_mask[i])
-#             fourth_edge_mask[i] = self.weighted_random_dropout_adj(start_output, fourth_edge_mask[i]);
-#         another_slot_node, another_imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask)
-#         cl_loss = self.loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
-# # ====================================================
+        # todo: 对比学习, 对 second_edge_mask 与 fourth_edge_mask 做随机边删除
+        new_second_edge_mask = []
+        new_fourth_edge_mask = []
+        for i in range(first_edge_mask.shape[0]):
+            current_second = self.weighted_random_dropout_adj(state_output[i], second_edge_mask[i], p=0.2).detach()
+            current_fourth = self.weighted_random_dropout_adj(state_output[i], fourth_edge_mask[i], p=0.2).detach()
+            new_second_edge_mask.append(current_second)
+            new_fourth_edge_mask.append(current_fourth)
+        second_edge_mask = torch.stack(new_second_edge_mask, dim=0).cuda()
+        fourth_edge_mask = torch.stack(new_fourth_edge_mask, dim=0).cuda()
+        another_slot_node, another_imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask)
+        # cl_loss = self.loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
+# ====================================================
         slot_text = self.slot_gate(sequence_output, state_output, slot_mask)    # Slot Name - Dialogue History 槽位-对话历史 [1,1,30,1024]
         history_text = self.history_gate(pooled_output)                         # Current Turn - Dialogue History 当前回合-对话历史 [1024]
 
@@ -298,7 +316,7 @@ class Generator(nn.Module):
         category_ans = category_ans.masked_fill((self.slot_ans_mask == 1).unsqueeze(0), -1e9) # ? [1, 30, 16]
         category_ans_softmax = F.softmax(category_ans, dim=-1) # ? [1, 30, 16]
         masked_fuse_score = F.softmax(masked_fuse_score.squeeze(-1).transpose(-1, -2), dim=-1) # ? [1, 30, 1]
-        return start_logits_softmax, end_logits_softmax, category_ans_softmax, start_logits, end_logits, category_ans, masked_fuse_score, input_ids.long()
+        return start_logits_softmax, end_logits_softmax, category_ans_softmax, start_logits, end_logits, category_ans, masked_fuse_score, input_ids.long(), slot_node, another_slot_node
 
     def slot_gate(self, text, slot, slot_mask, proj_layer=None):
         """_summary_

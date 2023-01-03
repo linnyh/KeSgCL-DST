@@ -7,11 +7,14 @@ import math
 import os
 import random
 import datetime
+import torch.nn as nn
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
+
+torch.autograd.set_detect_anomaly(True)
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -114,6 +117,66 @@ def saveOperationLogits(model, device, dataset, save_path, turn):
     with open(os.path.join(save_path, "cls_score_test_turn{}.json".format(turn)), "w") as writer:
         writer.write(json.dumps(score_ext_map, indent=4) + "\n")
 
+
+# ============================CL 损失计算=======================================
+
+def sim(z1: torch.Tensor, z2: torch.Tensor):
+    z1 = F.normalize(z1)
+    z2 = F.normalize(z2)
+    return torch.mm(z1, z2.t())
+
+def semi_loss(self, z1: torch.Tensor, z2: torch.Tensor):  # 损失输入为两个特征矩阵
+    f = lambda x: torch.exp(x / self.tau)
+    refl_sim = f(sim(z1, z1))
+    between_sim = f(sim(z1, z2))
+
+    return -torch.log(
+        between_sim.diag()
+        / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
+
+def batched_semi_loss(z1: torch.Tensor, z2: torch.Tensor,
+                        batch_size: int): # 输入特征是把几个batch的特征拼到一起
+    # Space complexity: O(BN) (semi_loss: O(N^2))
+    z1 = z1.view(z1.shape[0]*z1.shape[1], -1)
+    z2 = z2.view(z2.shape[0]*z2.shape[1], -1)
+
+    device = z1.device
+    num_nodes = z1.size(0)
+    num_batches = (num_nodes - 1) // batch_size + 1
+    f = lambda x: torch.exp(x / 0.5)
+    indices = torch.arange(0, num_nodes).to(device)
+    losses = []
+
+    for i in range(num_batches):
+        mask = indices[i * batch_size:(i + 1) * batch_size]
+        refl_sim = f(sim(z1[mask], z1))  # [B, N]
+        between_sim = f(sim(z1[mask], z2))  # [B, N]
+
+        losses.append(-torch.log(
+            between_sim[:, i * batch_size:(i + 1) * batch_size].diag()
+            / (refl_sim.sum(1) + between_sim.sum(1)
+                - refl_sim[:, i * batch_size:(i + 1) * batch_size].diag())))
+
+    return torch.cat(losses)
+
+
+def cl_loss(z1: torch.Tensor, z2: torch.Tensor,
+            mean: bool = True, batch_size: int = 0):  # 对比损失
+    h1 = z1.detach()
+    h2 = z2.detach()
+
+    if batch_size == 0:
+        l1 = semi_loss(h1, h2)
+        l2 = semi_loss(h2, h1)
+    else:
+        l1 = batched_semi_loss(h1, h2, batch_size)
+        l2 = batched_semi_loss(h2, h1, batch_size)
+
+    ret = (l1 + l2) * 0.5
+    ret = ret.mean() if mean else ret.sum()
+
+    return ret
+# ===============================================================
 
 def compute_span_loss(gen_ids, input_ids, fuse_score, start_scores, end_scores, generate_turn, sample_mask,
                       generate_mask):
@@ -404,6 +467,8 @@ def main():
 
     ontology = json.load(open(args.data_root + args.ontology_data))
 
+    criterion = nn.MSELoss()
+
     _, slot_meta = make_slot_meta(ontology)
     with torch.cuda.device(0):
         op2id = OP_SET[args.op_code]  # 槽位选择的标签
@@ -537,7 +602,7 @@ def main():
 
                     assert len(input_ids) <= TURN_SPLIT  # train在之前已经切分了，这里不应该有任何false的情况
                     sample_mask = (pred_ops.argmax(dim=-1) == 0) if turn == 1 else (op_ids == 0)
-                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, = model(input_ids=input_ids,
+                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, slot_node, another_slot_node = model(input_ids=input_ids,
                                                                                                   token_type_ids=segment_ids,
                                                                                                   state_positions=state_position_ids,
                                                                                                   attention_mask=input_mask,
@@ -550,7 +615,7 @@ def main():
                                                                                                   op_ids=op_ids,
                                                                                                   max_update=max_update,
                                                                                                   position_ids=position_ids,
-                                                                                                  sample_mm=sample_mm)
+                                                                                                  sample_mm=sample_mm) 
 
                     if turn == 2:
                         loss_selector = masked_cross_entropy_for_value(fuse_score.contiguous(),
@@ -563,14 +628,15 @@ def main():
                                                                          ) # 分类损失
                         loss_extractor = compute_span_loss(gen_ids, input_ids, fuse_score, start_logits, end_logits,
                                                            generate_turn, sample_mask, generate_mask)   # 跨度提取损失
-
                         # todo: 这里新增一个图对比学习的损失
-                        loss_grace = 0
+                        loss_grace = cl_loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
+                        # loss_grace = criterion(slot_node.contiguous(), another_slot_node.contiguous())
 
-                        loss = loss_classifier + loss_extractor
+                        # 加上对比学习损失 cl_loss
+                        loss = loss_classifier + loss_extractor  + loss_grace
                         loss = math.log(input_ids.shape[0], 8) * loss
 
-                        loss.backward()         # 损失反向传播
+                        loss.backward(retain_graph=True)         # 损失反向传播
                         for name, par in model.named_parameters():
                             if par.requires_grad and par.grad is not None:
                                 if torch.sum(torch.isnan(par.grad)) != 0:
@@ -726,7 +792,7 @@ def evaluate(dev_dataloader, model, device, ans_vocab_nd, cate_mask, turn=2, tok
             # assert len(input_ids) <= TEST_TURN_SPLIT  # test的之前没切分，在这里应该有False的情况出现
             # 测试样本在这里切分
             if len(input_ids) <= TEST_TURN_SPLIT:
-                start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, = model(input_ids=input_ids,
+                start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _, _= model(input_ids=input_ids,
                                                                                               token_type_ids=segment_ids,
                                                                                               state_positions=state_position_ids,
                                                                                               attention_mask=input_mask,
