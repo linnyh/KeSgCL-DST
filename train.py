@@ -1,5 +1,9 @@
 from __future__ import absolute_import, division, print_function
 
+import sys
+print(sys.path)
+sys.path.append("/home/fzus/lyh/DiCos/models/")
+
 import argparse
 import json
 import logging
@@ -13,6 +17,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
+import megengine as mge
+import megengine.autodiff as ad
+
+mge.dtr.enable()
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -137,8 +145,10 @@ def semi_loss(self, z1: torch.Tensor, z2: torch.Tensor):  # 损失输入为两�
 def batched_semi_loss(z1: torch.Tensor, z2: torch.Tensor,
                         batch_size: int): # 输入特征是把几个batch的特征拼到一起
     # Space complexity: O(BN) (semi_loss: O(N^2))
-    z1 = z1.view(z1.shape[0]*z1.shape[1], -1)
-    z2 = z2.view(z2.shape[0]*z2.shape[1], -1)
+    z1 = z1.transpose(0, 1)
+    z2 = z2.transpose(0, 1)
+    z1 = z1.reshape(z1.shape[0]*z1.shape[1], -1)
+    z2 = z2.reshape(z2.shape[0]*z2.shape[1], -1)
 
     device = z1.device
     num_nodes = z1.size(0)
@@ -336,7 +346,7 @@ def main():
     parser.add_argument("--do_lower_case", action='store_true',
                         help="Set this flag if you are using an uncased model.")
 
-    parser.add_argument("--per_gpu_train_batch_size", default=32, type=int,
+    parser.add_argument("--per_gpu_train_batch_size", default=16, type=int,
                         help="Batch size per GPU/CPU for training.")
     parser.add_argument("--per_gpu_eval_batch_size", default=32, type=int,
                         help="Batch size per GPU/CPU for evaluation.")
@@ -420,6 +430,10 @@ def main():
     parser.add_argument("--generation_weight", default=0.2, type=float)
     parser.add_argument("--extraction_weight", default=0.1, type=float)
     parser.add_argument("--msg", default=None, type=str)
+    
+    parser.add_argument("--clearning", default=False, type=bool)
+    parser.add_argument("--syn_guide", default=True, type=bool)
+
     args = parser.parse_args()
 
     if os.path.exists(args.output_dir) and os.listdir(
@@ -489,7 +503,7 @@ def main():
             isfilter = True
 
         model = Generator(args, len(op2id), len(domain2id), op2id['update'], esm_ans_vocab, slot_mm, turn=turn,
-                          turn_id=turn_id)
+                          turn_id=turn_id, tokenizer=tokenizer)
         train_data_raw, _, _ = prepare_dataset(data_path=args.data_root + args.train_data,
                                                tokenizer=tokenizer,
                                                slot_meta=slot_meta,
@@ -580,6 +594,7 @@ def main():
                  'lr': args.base_lr}]
 
             enc_optimizer = AdamW(enc_optimizer_grouped_parameters, lr=args.base_lr)
+            # cl_optimizer = AdamW()
 
             enc_scheduler = get_linear_schedule_with_warmup(enc_optimizer,
                                                             num_warmup_steps=int(num_train_steps * args.enc_warmup),
@@ -602,7 +617,7 @@ def main():
 
                     assert len(input_ids) <= TURN_SPLIT  # train在之前已经切分了，这里不应该有任何false的情况
                     sample_mask = (pred_ops.argmax(dim=-1) == 0) if turn == 1 else (op_ids == 0)
-                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, slot_node, another_slot_node = model(input_ids=input_ids,
+                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, ctl_loss = model(input_ids=input_ids,
                                                                                                   token_type_ids=segment_ids,
                                                                                                   state_positions=state_position_ids,
                                                                                                   attention_mask=input_mask,
@@ -629,7 +644,8 @@ def main():
                         loss_extractor = compute_span_loss(gen_ids, input_ids, fuse_score, start_logits, end_logits,
                                                            generate_turn, sample_mask, generate_mask)   # 跨度提取损失
                         # todo: 这里新增一个图对比学习的损失
-                        loss_grace = cl_loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
+                        loss_grace = ctl_loss
+                        # loss_grace = cl_loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
                         # loss_grace = criterion(slot_node.contiguous(), another_slot_node.contiguous())
 
                         # 加上对比学习损失 cl_loss
@@ -643,6 +659,7 @@ def main():
                                     model.zero_grad()
 
                     batch_loss.append(loss.item())
+                    del batch
                     torch.cuda.empty_cache()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     enc_optimizer.step()
@@ -659,18 +676,22 @@ def main():
                         logger_trainInfo.debug(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
                         file_logger.log(
-                            "Epoch {}\t Step {}\t loss {:.6f}\t time {}".format(epoch, step, loss,
+                            "Epoch {}\t Step {}\t loss {:.6f}\t cl_loss {:.6f}\t time {}".format(epoch, step, loss, loss_grace,
                                                                                 datetime.datetime.now().strftime(
                                                                                     '%Y-%m-%d %H:%M:%S')))
 
-                        logger_trainInfo.info("Epoch {}\t Step {}\t loss {:.6f}\t time {}".format(epoch, step, loss,
+                        logger_trainInfo.info("Epoch {}\t Step {}\t loss {:.6f}\t cl_loss {:.6f}\t time {}".format(epoch, step, loss, loss_grace,
                                                                                                   datetime.datetime.now().strftime(
                                                                                                       '%Y-%m-%d %H:%M:%S')))
+                        # torch.cuda.empty_cache()
+                        del batch_loss
                         batch_loss = []
+                    # del batch_loss, batch, input_ids
                 if True:
-                    joint_acc, catejoint_acc, noncatejoint_acc = evaluate(dev_dataloader, model, device, ans_vocab_nd,
-                                                                          cate_mask, turn=2, tokenizer=tokenizer,
-                                                                          ontology=ontology)
+                    with torch.no_grad(): # 训练无需梯度
+                        joint_acc, catejoint_acc, noncatejoint_acc = evaluate(dev_dataloader, model, device, ans_vocab_nd,
+                                                                            cate_mask, turn=2, tokenizer=tokenizer,
+                                                                            ontology=ontology)
                     if joint_acc > best_score['overall_jga']:
                         best_score['epoch'] = epoch
                         best_score['overall_jga'] = joint_acc
@@ -721,7 +742,7 @@ def main():
                         "Best: Epoch_{}\tJointAcc: {:.4f}\tCategorical-JointAcc: {:.4f}\tnon-Categorical-JointAcc: {:.4f}".format(
                             best_score['epoch'], best_score['overall_jga'], best_score['cate_jga'],
                             best_score['noncate_jga']))
-                    del loss
+                del loss
 
                 # 每个epoch保存模型
                 model_to_save = model.module if hasattr(model, 'module') else model
@@ -792,7 +813,7 @@ def evaluate(dev_dataloader, model, device, ans_vocab_nd, cate_mask, turn=2, tok
             # assert len(input_ids) <= TEST_TURN_SPLIT  # test的之前没切分，在这里应该有False的情况出现
             # 测试样本在这里切分
             if len(input_ids) <= TEST_TURN_SPLIT:
-                start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _, _= model(input_ids=input_ids,
+                start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _ = model(input_ids=input_ids,
                                                                                               token_type_ids=segment_ids,
                                                                                               state_positions=state_position_ids,
                                                                                               attention_mask=input_mask,
@@ -837,7 +858,7 @@ def evaluate(dev_dataloader, model, device, ans_vocab_nd, cate_mask, turn=2, tok
                 tmp_sample_mm = [sample_mm[:TEST_TURN_SPLIT, :, :], sample_mm[TEST_TURN_SPLIT:, :, :]]
 
                 for cnt in range(2):
-                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, = model(
+                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _ = model(
                         input_ids=tmp_input_ids[cnt],
                         token_type_ids=tmp_segment_ids[cnt],
                         state_positions=tmp_state_position_ids[cnt],

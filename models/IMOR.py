@@ -61,9 +61,9 @@ class MultiRelationalGCN(nn.Module):
 
             # 门控更新
             slot_gate = F.sigmoid(self.f_g(torch.cat([slot_node_current, slot_node], dim=-1))) # ! [1, 30, 1024]
-            slot_node = (F.relu(slot_node_current) * slot_gate) + (slot_node * (1 - slot_gate)) # ! [1, 30, 1024]
+            slot_node = (F.relu(slot_node_current, inplace=True) * slot_gate) + (slot_node * (1 - slot_gate)) # ! [1, 30, 1024]
 
             dialogue_gate = F.sigmoid(self.f_g(torch.cat([dialogue_node_current, dialogue_node], dim=-1))) # ! [1, 1, 1024]
-            dialogue_node = (F.relu(dialogue_node_current) * dialogue_gate) + (dialogue_node * (1 - dialogue_gate)) # ! [1, 1, 1024]
+            dialogue_node = (F.relu(dialogue_node_current, inplace=True) * dialogue_gate) + (dialogue_node * (1 - dialogue_gate)) # ! [1, 1, 1024]
 
         return slot_node, dialogue_node # ?[1, 30, 1024] [1, 1, 1024]

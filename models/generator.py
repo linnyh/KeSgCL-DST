@@ -1,4 +1,7 @@
 import numpy as np
+import sys
+print(sys.path)
+sys.path.append("/home/fzus/lyh/DiCos/models/")
 import torch
 import torch.nn as nn
 from transformers import BertConfig
@@ -11,10 +14,12 @@ from models.grace import Model, Encoder
 import random
 import heapq
 from scipy import spatial
+import spacy
+from models.ModelBERT import SGMultiHeadAttention
 
 
 class Generator(nn.Module):
-    def __init__(self, args, n_op, n_domain, update_id, ans_vocab, slot_mm, turn=2, turn_id=30006):
+    def __init__(self, args, n_op, n_domain, update_id, ans_vocab, slot_mm, turn=2, turn_id=30006, tokenizer=None):
         super(Generator, self).__init__()
         bert_config = BertConfig.from_pretrained(args.model_name_or_path + "config.json")
         args.slot_size = n_slot
@@ -75,6 +80,11 @@ class Generator(nn.Module):
         self.fc2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
         self.tau = 0.5
 
+        # 句法依赖工具
+        self.nlp = spacy.load('en_core_web_sm')
+        self.tokenizer = tokenizer
+        self.sg_attn = SGMultiHeadAttention(heads=2, d_model=self.hidden_size)
+
     def init_ans_vocab(self, ans_vocab):
         slot_ans_size = ans_vocab.size(1)
         init_vocab = nn.Parameter(torch.FloatTensor(self.args.slot_size, slot_ans_size, self.args.hidden_size),
@@ -122,15 +132,17 @@ class Generator(nn.Module):
             / (refl_sim.sum(1) + between_sim.sum(1) - refl_sim.diag()))
 
     def batched_semi_loss(self, z1: torch.Tensor, z2: torch.Tensor,
-                          batch_size: int):
+                            batch_size: int): # 输入特征是把几个batch的特征拼到一起
         # Space complexity: O(BN) (semi_loss: O(N^2))
-        z1 = z1.view(z1.shape[0]*z1.shape[1], -1)
-        z2 = z2.view(z2.shape[0]*z2.shape[1], -1)
+        z1 = z1.transpose(0, 1)
+        z2 = z2.transpose(0, 1)
+        z1 = z1.reshape(z1.shape[0]*z1.shape[1], -1)
+        z2 = z2.reshape(z2.shape[0]*z2.shape[1], -1)
 
         device = z1.device
         num_nodes = z1.size(0)
         num_batches = (num_nodes - 1) // batch_size + 1
-        f = lambda x: torch.exp(x / self.tau)
+        f = lambda x: torch.exp(x / 0.5)
         indices = torch.arange(0, num_nodes).to(device)
         losses = []
 
@@ -142,14 +154,15 @@ class Generator(nn.Module):
             losses.append(-torch.log(
                 between_sim[:, i * batch_size:(i + 1) * batch_size].diag()
                 / (refl_sim.sum(1) + between_sim.sum(1)
-                   - refl_sim[:, i * batch_size:(i + 1) * batch_size].diag())))
+                    - refl_sim[:, i * batch_size:(i + 1) * batch_size].diag())))
 
         return torch.cat(losses)
 
-    def loss(self, z1: torch.Tensor, z2: torch.Tensor,
-             mean: bool = True, batch_size: int = 0):  # 对比损失
-        h1 = self.projection(z1)
-        h2 = self.projection(z2)
+
+    def cl_loss(self, z1: torch.Tensor, z2: torch.Tensor,
+                mean: bool = True, batch_size: int = 0):  # 对比损失
+        h1 = z1
+        h2 = z2
 
         if batch_size == 0:
             l1 = self.semi_loss(h1, h2)
@@ -214,6 +227,25 @@ class Generator(nn.Module):
         # 返回删除边后的邻接矩阵
         return coo_adj
 
+    def get_dependency_edges(self, spacy_nlp, input_ids):
+        '''
+        获取句法依赖的依赖边
+        @param spacy_nlp: spacy 对象
+        @return: 返回依赖边元组列表
+        '''
+        sentence = self.tokenizer.decode(input_ids).join(" ")
+        document = spacy_nlp(sentence)
+        tokens = [token.text for token in document]
+        seq_len = len(tokens)
+        adj = torch.zeros(seq_len, seq_len)
+        edges = []
+        pos = []  # 词性标注
+        for token in document:
+            pos.append(token.pos_)
+            for child in token.children:
+                edges.append((token.text, child.text))
+        return edges, pos
+
     def forward(self, input_ids, token_type_ids,
                 state_positions, attention_mask, slot_mask, first_edge_mask, second_edge_mask, third_edge_mask,
                 fourth_edge_mask,
@@ -239,18 +271,21 @@ class Generator(nn.Module):
         # 将对话状态输入GCN, 输出 slot_node [1,30,1024], dialogue_node [1,1,1024]
         slot_node, imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask) # # Implicit Mention Oriented Reasoning _:[1,30,1024] imor_output:[1,1,1024]
 # ====================新增=============================================================
-        # todo: 对比学习, 对 second_edge_mask 与 fourth_edge_mask 做随机边删除
-        new_second_edge_mask = []
-        new_fourth_edge_mask = []
-        for i in range(first_edge_mask.shape[0]):
-            current_second = self.weighted_random_dropout_adj(state_output[i], second_edge_mask[i], p=0.2).detach()
-            current_fourth = self.weighted_random_dropout_adj(state_output[i], fourth_edge_mask[i], p=0.2).detach()
-            new_second_edge_mask.append(current_second)
-            new_fourth_edge_mask.append(current_fourth)
-        second_edge_mask = torch.stack(new_second_edge_mask, dim=0).cuda()
-        fourth_edge_mask = torch.stack(new_fourth_edge_mask, dim=0).cuda()
-        another_slot_node, another_imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask)
-        # cl_loss = self.loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
+        cl_loss = 0.0
+        if self.args.clearning:
+            # todo: 对比学习, 对 second_edge_mask 与 fourth_edge_mask 做加权随机边删除
+            new_second_edge_mask = []
+            new_fourth_edge_mask = []
+            for i in range(first_edge_mask.shape[0]):
+                current_second = self.weighted_random_dropout_adj(state_output[i], second_edge_mask[i], p=0.2).detach()
+                current_fourth = self.weighted_random_dropout_adj(state_output[i], fourth_edge_mask[i], p=0.2).detach()
+                new_second_edge_mask.append(current_second)
+                new_fourth_edge_mask.append(current_fourth)
+            second_edge_mask = torch.stack(new_second_edge_mask, dim=0).cuda()
+            fourth_edge_mask = torch.stack(new_fourth_edge_mask, dim=0).cuda()
+            another_slot_node, another_imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask)
+            cl_loss = self.cl_loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
+        
 # ====================================================
         slot_text = self.slot_gate(sequence_output, state_output, slot_mask)    # Slot Name - Dialogue History 槽位-对话历史 [1,1,30,1024]
         history_text = self.history_gate(pooled_output)                         # Current Turn - Dialogue History 当前回合-对话历史 [1024]
@@ -273,14 +308,41 @@ class Generator(nn.Module):
 
         # 对话选择
         input_ids, attention_mask, history_slot_mask, history_turn_mask, token_type_ids, state_positions, masked_fuse_score, selected_score = self.select_history(
-            fuse_score, input_ids, 2, slot_mask, sample_mm) # ? input_ids:[1,2,256] token_type_ids:[1,2,256] selected_score:[1,2,256]
+            fuse_score, input_ids, 2, slot_mask, sample_mm) # ? input_ids:[1,2,256] 表示选取了2个句子 token_type_ids:[1,2,256] selected_score:[1,2,256]
         # 状态生成器部分
-        enc_outputs = self.albert(input_ids=input_ids.reshape(-1, input_ids.shape[-1]).long(),
-                                  token_type_ids=token_type_ids.reshape(-1, input_ids.shape[-1]).long(),
-                                  position_ids=position_ids.repeat(sample_mm.shape[1], 1).long(),
-                                  attention_mask=attention_mask.reshape(-1, input_ids.shape[-1]))
+        # todo 添加句法指导的注意力模块
+        with torch.no_grad():
+            enc_outputs = self.albert(input_ids=input_ids.reshape(-1, input_ids.shape[-1]).long(), # [2, 256]
+                                    token_type_ids=token_type_ids.reshape(-1, input_ids.shape[-1]).long(),
+                                    position_ids=position_ids.repeat(sample_mm.shape[1], 1).long(),
+                                    attention_mask=attention_mask.reshape(-1, input_ids.shape[-1]))
         sequence_output, pooled_output = enc_outputs[:2] # ?  sequence_output:[2,256,1024] pooled_output:[2, 1024]
-
+        # todo: 对 sequence_output 做句法指导注意力
+        if self.args.syn_guide:
+            # 获取文本
+            sentences = []
+            docs = []
+            adj_matrixs = []
+            inputs = input_ids.reshape(-1, input_ids.shape[-1]).long() # [2, 256]
+            for i in range(inputs.shape[0]):
+                sent = self.tokenizer.convert_ids_to_tokens(inputs[i])
+                stripped_words = list(map(lambda x: x.lstrip('▁').strip("[]").strip("<>"), sent))
+                try:
+                    pad_idx = stripped_words.index("pad")
+                except ValueError:
+                    pad_idx = 256
+                sentences.append(" ".join(stripped_words))
+                docs.append(self.nlp(sentences[i]))
+                adj_matrixs.append(torch.tensor([[0 for _ in range(inputs.shape[-1])] for _ in range(inputs.shape[-1])])) # 每个邻接矩阵大小为 [256,256]
+                # 依据依赖关系构建邻接矩阵
+                for token in docs[i]:
+                    for child in token.children:
+                        if token.i < pad_idx and child.i < pad_idx:
+                            adj_matrixs[i][token.i][child.i] = 1
+                            adj_matrixs[i][child.i][token.i] = 1
+            adj_matrixs = torch.stack(adj_matrixs, dim=0).cuda() # [2, 256, 256]
+            sequence_output = self.sg_attn(sequence_output, sequence_output, sequence_output, adj_matrixs) # 自注意力机制
+            
         selected_score = torch.reshape(selected_score, [-1, input_ids.shape[-1]]).unsqueeze(-1) # ? [2, 256, 1]
         sequence_output = selected_score * sequence_output  # ? [2, 256, 1024]
 
@@ -301,8 +363,8 @@ class Generator(nn.Module):
             self.hidden_size) # ! [1, 30, 256]
         end_atten_m = state_output.mul(end_output).sum(dim=-1).view(sequence_output.shape[0], sequence_output.shape[1],
                                                                     -1) / math.sqrt(self.hidden_size) # ! [1, 30, 256]
-        start_logits = start_atten_m.masked_fill(attention_mask.squeeze() == 0, -1e9) # ! [1, 30, 256]
-        end_logits = end_atten_m.masked_fill(attention_mask.squeeze() == 0, -1e9) # ! [1, 30, 256]
+        start_logits = start_atten_m.masked_fill(attention_mask.squeeze() == 0, -1e9) # ! [1, 30, 256] 起始点概率分布
+        end_logits = end_atten_m.masked_fill(attention_mask.squeeze() == 0, -1e9) # ! [1, 30, 256] 结束点概率分布
         start_logits_softmax = F.softmax(start_logits[:, :, 1:], dim=-1) # ? [1, 30, 255]
         end_logits_softmax = F.softmax(end_logits[:, :, 1:], dim=-1) # ? [1, 30, 255]
         ques_attn = F.softmax((sequence_output.mul(state_output.view(-1, self.n_slot, 1, self.hidden_size)).sum(
@@ -316,7 +378,7 @@ class Generator(nn.Module):
         category_ans = category_ans.masked_fill((self.slot_ans_mask == 1).unsqueeze(0), -1e9) # ? [1, 30, 16]
         category_ans_softmax = F.softmax(category_ans, dim=-1) # ? [1, 30, 16]
         masked_fuse_score = F.softmax(masked_fuse_score.squeeze(-1).transpose(-1, -2), dim=-1) # ? [1, 30, 1]
-        return start_logits_softmax, end_logits_softmax, category_ans_softmax, start_logits, end_logits, category_ans, masked_fuse_score, input_ids.long(), slot_node, another_slot_node
+        return start_logits_softmax, end_logits_softmax, category_ans_softmax, start_logits, end_logits, category_ans, masked_fuse_score, input_ids.long(), cl_loss # slot_node, another_slot_node
 
     def slot_gate(self, text, slot, slot_mask, proj_layer=None):
         """_summary_

@@ -1,0 +1,84 @@
+blis==0.7.9
+boto3==1.26.46
+botocore==1.29.46
+brotlipy @ file:///home/conda/feedstock_root/build_artifacts/brotlipy_1648854175163/work
+catalogue==2.0.8
+certifi @ file:///croot/certifi_1665076670883/work/certifi
+cffi @ file:///home/conda/feedstock_root/build_artifacts/cffi_1636046063618/work
+charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1661170624537/work
+click==8.1.3
+confection==0.0.3
+contourpy==1.0.6
+cryptography @ file:///home/conda/feedstock_root/build_artifacts/cryptography_1652967113783/work
+cycler==0.11.0
+cymem==2.0.7
+Deprecated==1.2.13
+en-core-web-sm @ file:///data/lyh/en_core_web_sm-3.3.0.tar.gz
+filelock==3.8.2
+fonttools==4.38.0
+huggingface-hub==0.11.1
+idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1663625384323/work
+Jinja2==3.1.2
+jmespath==1.0.1
+joblib==1.2.0
+kiwisolver==1.4.4
+langcodes==3.3.0
+MarkupSafe==2.1.1
+matplotlib==3.6.2
+MegEngine==1.12.0
+megfile==1.0.2
+mkl-fft==1.3.1
+mkl-random==1.2.2
+mkl-service==2.4.0
+mprop==0.16.0
+murmurhash==1.0.9
+networkx==2.8.8
+numexpr==2.8.4
+numpy==1.22.4
+olefile @ file:///home/conda/feedstock_root/build_artifacts/olefile_1602866521163/work
+opencv-python==4.7.0.68
+packaging==21.3
+pandas==1.5.2
+pathy==0.10.1
+Pillow @ file:///home/conda/feedstock_root/build_artifacts/pillow_1621287973719/work
+preshed==3.0.8
+protobuf==3.20.1
+psutil==5.9.4
+pyarrow==10.0.1
+pycparser @ file:///home/conda/feedstock_root/build_artifacts/pycparser_1636257122734/work
+pydantic==1.8.2
+pyOpenSSL @ file:///home/conda/feedstock_root/build_artifacts/pyopenssl_1663846997386/work
+pyparsing==3.0.9
+PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1648857275402/work
+python-dateutil==2.8.2
+pytz==2022.6
+PyYAML==6.0
+regex==2022.10.31
+requests @ file:///home/conda/feedstock_root/build_artifacts/requests_1661872987712/work
+s3transfer==0.6.0
+scikit-learn==1.1.3
+scipy==1.7.3
+sentencepiece==0.1.97
+six @ file:///home/conda/feedstock_root/build_artifacts/six_1620240208055/work
+sklearn==0.0.post1
+smart-open==6.2.0
+spacy==3.3.1
+spacy-legacy==3.0.10
+spacy-loggers==1.0.3
+srsly==2.4.5
+tables==3.7.0
+tabulate==0.9.0
+tensorboardX==2.5.1
+thinc==8.0.17
+threadpoolctl==3.1.0
+tokenizers==0.13.2
+torch==1.12.1
+torchaudio==0.12.1
+torchvision==0.13.1
+tqdm==4.64.1
+transformers==4.25.1
+typer==0.4.2
+typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/typing_extensions_1665144421445/work
+urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1669259737463/work
+wasabi==0.10.1
+wrapt==1.14.1
