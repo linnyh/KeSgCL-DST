@@ -12,12 +12,14 @@ import torch
 from models.ConceptNet import *
 import numpy as np
 import spacy
+from spacy import displacy
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse as sp
 import matplotlib as mpl
 import torch.nn.functional as F
+
 
 
 def get_matrix_triad(coo_matrix, data=False):
@@ -113,6 +115,9 @@ def get_entity_and_sort_rel(data, word, focus):
             for rel in raw[key]:
                 relations.append((key, rel[0], rel[1]))
     return sorted(relations, key=functools.cmp_to_key(cmp))
+
+
+
 
 
 class Graph:
@@ -386,10 +391,68 @@ def get_knowledge_graph(input_ids, k_embeddings, nlp, tokenizer, entities_dict):
     return graph_features, graph_adjs
 
 
+'''
+Spacy 命名体识别：
+PERSON:      People, including fictional.
+NORP:        Nationalities or religious or political groups.
+FAC:         Buildings, airports, highways, bridges, etc.
+ORG:         Companies, agencies, institutions, etc.
+GPE:         Countries, cities, states.
+LOC:         Non-GPE locations, mountain ranges, bodies of water.
+PRODUCT:     Objects, vehicles, foods, etc. (Not services.)
+EVENT:       Named hurricanes, battles, wars, sports events, etc.
+WORK_OF_ART: Titles of books, songs, etc.
+LAW:         Named documents made into laws.
+LANGUAGE:    Any named language.
+DATE:        Absolute or relative dates or periods.
+TIME:        Times smaller than a day.
+PERCENT:     Percentage, including ”%“.
+MONEY:       Monetary values, including unit.
+QUANTITY:    Measurements, as of weight or distance.
+ORDINAL:     “first”, “second”, etc.
+CARDINAL:    Numerals that do not fall under another type.
+'''
+def expend_sentence(text, spacy_nlp, data, focus=None, pos=None):
+    """
+    @param focus:
+    @param pos:
+    @param text: 待扩展文本
+    @param spacy_nlp: spacy 包
+    @param data: 知识图谱
+    @return: 扩展后文本
+    """
+    entity_map = {"TIME": "time", "DATE": "day", "CARDINAL": "number", "LOC": "location", "GPE": "location",
+                  "FAC": "location"}
+    keys = entity_map.keys()
+    doc = spacy_nlp(text)
+    ents = {}
+
+    for ent in doc.ents:
+        if ent.label_ in keys:
+            ents[ent.end] = entity_map[ent.label_]
+    displacy.render(doc, style='ent', jupyter=False)
+    keys = ents.keys()
+    tokens = [token for token in doc]
+    exp_text = []
+    # 遍历单词，择机扩展
+    for idx in range(len(tokens)):
+        exp_text.append(str(tokens[idx]))
+        if idx+1 in keys:
+            exp_text.append(str("(Is a " + ents[idx+1] + ")"))
+    print(" ".join(exp_text))
+    return " ".join(exp_text)
+
+
+
+
+
+
+
+
 if __name__ == '__main__':
-    nlp = spacy.load('en_core_web_sm')
-    embeddings = AttributeHeuristic('/home/fzus/lyh/DiCoS/models/mini.h5')
-    with open("/data/lyh/kb/entity_en.json", 'r', encoding='UTF-8') as f:
+    nlp = spacy.load('en_core_web_trf')
+    embeddings = AttributeHeuristic('D:/Projects/Papers/mini.h5')
+    with open("D:/Projects/Papers/entity_en.json", 'r', encoding='UTF-8') as f:
         t1 = time.time()
         entities_dict = json.load(f)
         entities_dict = DataDict(entities_dict)
@@ -397,29 +460,31 @@ if __name__ == '__main__':
         root = {'start': 'hotel', 'children': []}
         t3 = time.time()
         sentence = 'there is an expensive italian restaurant named frankie and bennys at cambridge leisure park clifton way cherry hinton . would you like to go there or choose another ?	great yeah that sounds great can you book a table for 5 people at 11:30 on sunday ?'
-        graph = creat_sentence_graph(sentence=sentence, spacy_nlp=nlp, data=entities_dict, embeddings=embeddings,
-                                     max_n=2, cur_hop=0, hop=1,
-                                     focus=['IsA', 'Synonym', 'RelatedTo', 'DefinedAs', 'SimilarTo'],
-                                     pos=['ADJ', 'NOUN', 'NUM', 'ADV'])
-        print(graph.get_features())
-        print(graph.get_features().shape)
-        print(graph.get_node())
-        torch.set_printoptions(profile="full")
-        print(graph.get_adj())
-        print(graph.get_root())
-        t4 = time.time()
-        print("构建邻接矩阵花费 {} 秒!".format(t4 - t3))
-        visual_graph(graph)
-# print("正在读取 CSV 文件...")
-# data = pd.read_csv('/data/lyh/kb/assertions.csv', delimiter='\t')
-# data.columns = ['uri', 'relation', 'start', 'end', 'json']
-# data = data[data['start'].apply(lambda row: row.find('/en') > 0) & data['end'].apply(lambda row: row.find('/en') > 0)]
-# data.index = range(data.shape[0])
-# weights = data['json'].apply(lambda row: json.loads(row)['weight'])
-# data.pop('json')
-# data.insert(4, 'weights', weights)
-# print("总共有 [{}] 个实体!".format(data.shape[0]))
-# generate_json_file(data, '/data/lyh/kb/entity_en.json')
+        expend_sentence(text=sentence, spacy_nlp=nlp, data=entities_dict, focus=['IsA'], pos=['NOUN'])
+
+        # graph = creat_sentence_graph(sentence=sentence, spacy_nlp=nlp, data=entities_dict, embeddings=embeddings,
+        #                              max_n=2, cur_hop=0, hop=1,
+        #                              focus=['IsA', 'Synonym', 'RelatedTo', 'DefinedAs', 'SimilarTo'],
+        #                              pos=['ADJ', 'NOUN', 'NUM', 'ADV'])
+        # print(graph.get_features())
+        # print(graph.get_features().shape)
+        # print(graph.get_node())
+        # torch.set_printoptions(profile="full")
+        # print(graph.get_adj())
+        # print(graph.get_root())
+        # t4 = time.time()
+        # print("构建邻接矩阵花费 {} 秒!".format(t4 - t3))
+        # visual_graph(graph)
+    # print("正在读取 CSV 文件...")
+    # data = pd.read_csv('D:/Projects/Papers/assertions.csv', delimiter='\t')
+    # data.columns = ['uri', 'relation', 'start', 'end', 'json']
+    # data = data[data['start'].apply(lambda row: row.find('/en') > 0) & data['end'].apply(lambda row: row.find('/en') > 0)]
+    # data.index = range(data.shape[0])
+    # weights = data['json'].apply(lambda row: json.loads(row)['weight'])
+    # data.pop('json')
+    # data.insert(4, 'weights', weights)
+    # print("总共有 [{}] 个实体!".format(data.shape[0]))
+    # generate_json_file(data, './entity_en.json')
 
 # root = Node('hotel')
 # print("开始构图...")

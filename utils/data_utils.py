@@ -9,6 +9,11 @@ from functools import reduce
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import spacy
+
+nlp = spacy.load('en_core_web_trf')
+
+from utils.data_kb_util import *
 
 from utils.constant import track_slots, n_slot, domain2id, EXPERIMENT_DOMAINS, OP_SET, ansvocab, slot_map, ALBERT_SEP, \
     TURN_SPLIT
@@ -216,7 +221,7 @@ global_isfilter = False
 global_split = True
 global_turn = 0
 
-
+# todo 在这里扩展语句
 def process_dial_dict(dial_dict, if_train):
     datas = []
     global global_max_seq_length, global_op_code, global_tokenizer, global_slot_ans, global_slot_ans, global_slot_meta, global_n_history, global_diag_level, global_pred_op, global_isfilter, global_turn, global_split
@@ -236,7 +241,7 @@ def process_dial_dict(dial_dict, if_train):
     else:
         turn_split = 99
 
-    for ti, turn in enumerate(dial_dict["dialogue"]):
+    for ti, turn in enumerate(dial_dict["dialogue"]): # 遍历初始数据集json字典
         turn_domain = turn['domain']
         split_turn_id = ti if not global_split else (ti % turn_split)
         if global_split and split_turn_id == 0:
@@ -246,7 +251,9 @@ def process_dial_dict(dial_dict, if_train):
             block_datas = []
             last_update_turn = [-1 for i in range(n_slot)]
         turn_id = turn["turn_idx"]
-        turn_uttr = (turn["system_transcript"] + ' ; ' + turn["transcript"]).strip()
+        # TODO： 在这里对系统话语与用户话语进行扩充与拼接拼接，或者只对用户话语进行扩展
+        text = turn["system_transcript"] + ' ; ' + turn["transcript"]
+        turn_uttr = (expend_sentence(text=text, spacy_nlp=nlp, data=entities_dict, focus=['IsA'], pos=['NOUN'])).strip()
         dialog_history.append(last_uttr)
         turn_dialog_state = fix_general_label_error(turn["belief_state"], False, global_slot_meta)
         sample_ids = dial_dict["dialogue_idx"] + "_" + str(turn_id)
