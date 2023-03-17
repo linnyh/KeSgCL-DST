@@ -4,6 +4,7 @@ import time
 
 import sys
 sys.path.append('')
+sys.path.append('/home/fzus/lyh/DiCoS/')
 
 import pandas as pd
 from tqdm import tqdm
@@ -392,6 +393,7 @@ def get_knowledge_graph(input_ids, k_embeddings, nlp, tokenizer, entities_dict):
 
 
 '''
+CARDINAL, DATE, EVENT, FAC, GPE, LANGUAGE, LAW, LOC, MONEY, NORP, ORDINAL, ORG, PERCENT, PERSON, PRODUCT, QUANTITY, TIME, WORK_OF_ART
 Spacy 命名体识别：
 PERSON:      People, including fictional.
 NORP:        Nationalities or religious or political groups.
@@ -412,6 +414,7 @@ QUANTITY:    Measurements, as of weight or distance.
 ORDINAL:     “first”, “second”, etc.
 CARDINAL:    Numerals that do not fall under another type.
 '''
+
 def expend_sentence(text, spacy_nlp, data, focus=None, pos=None):
     """
     @param focus:
@@ -451,16 +454,29 @@ def expend_sentence(text, spacy_nlp, data, focus=None, pos=None):
 
 if __name__ == '__main__':
     nlp = spacy.load('en_core_web_trf')
-    embeddings = AttributeHeuristic('D:/Projects/Papers/mini.h5')
-    with open("D:/Projects/Papers/entity_en.json", 'r', encoding='UTF-8') as f:
+    # embeddings = AttributeHeuristic('D:/Projects/Papers/mini.h5')
+    with open("/home/fzus/lyh/DiCoS/data/entity_en.json", 'r', encoding='UTF-8') as f:
         t1 = time.time()
         entities_dict = json.load(f)
         entities_dict = DataDict(entities_dict)
         t2 = time.time()
         root = {'start': 'hotel', 'children': []}
         t3 = time.time()
-        sentence = 'there is an expensive italian restaurant named frankie and bennys at cambridge leisure park clifton way cherry hinton . would you like to go there or choose another ?	great yeah that sounds great can you book a table for 5 people at 11:30 on sunday ?'
-        expend_sentence(text=sentence, spacy_nlp=nlp, data=entities_dict, focus=['IsA'], pos=['NOUN'])
+        with open("/home/fzus/lyh/DiCoS/data/mwz2.2/train_dials.json", 'r', encoding='UTF-8') as ff:
+            dials = json.load(ff)
+            dials = list(dials)[:300]
+            for idx, dial in enumerate(tqdm(list(dials))):
+                # print(dial)
+                for turn in list(dial["dialogue"]):
+                    turn["system_transcript"] = expend_sentence(text=turn["system_transcript"], spacy_nlp=nlp, data=entities_dict, focus=['IsA'], pos=['NOUN'])
+                    turn["transcript"] = expend_sentence(text=turn["transcript"], spacy_nlp=nlp,
+                                                                data=entities_dict, focus=['IsA'], pos=['NOUN'])
+            json_str = json.dumps(dials)
+            with open('/home/fzus/lyh/DiCoS/data/mwz2.2/train_dials_enhence_small.json', 'w', encoding='UTF-8') as d:
+                d.write(json_str)
+        
+    #     sentence = 'there is an expensive italian restaurant named frankie and bennys at cambridge leisure park clifton way cherry hinton . would you like to go there or choose another ?	great yeah that sounds great can you book a table for 5 people at 11:30 on sunday ?'
+    #     expend_sentence(text=sentence, spacy_nlp=nlp, data=entities_dict, focus=['IsA'], pos=['NOUN'])
 
         # graph = creat_sentence_graph(sentence=sentence, spacy_nlp=nlp, data=entities_dict, embeddings=embeddings,
         #                              max_n=2, cur_hop=0, hop=1,

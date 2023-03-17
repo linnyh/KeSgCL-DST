@@ -87,9 +87,10 @@ class SGMultiHeadAttention(nn.Module):
         # TODO 将句法依赖邻接矩阵作为mask矩阵 done
         if mask is not None:
             mask = mask.unsqueeze(1)
-            scores = scores.masked_fill(mask == 0, -1e9)  # [PAD] 位置置位无穷小
+            scores = scores.masked_fill(mask == 0.0, -1e9)  # [PAD] 位置置位无穷小
+    
         # scores = self.max_n_mask(scores, 18)
-        scores = F.softmax(scores, dim=-1)
+        scores = F.softmax(scores, dim=-2)
 
         if dropout is not None:
             scores = dropout(scores)
@@ -144,7 +145,7 @@ class MultiHeadAttention(nn.Module):
         if mask is not None:
             mask = mask.unsqueeze(1)
             scores = scores.masked_fill(mask == 0, -1e9)  # [PAD] 位置置位无穷小
-        scores = F.softmax(scores, dim=-1)
+        scores = F.softmax(scores, dim=-2)
 
         if dropout is not None:
             scores = dropout(scores)

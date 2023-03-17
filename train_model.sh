@@ -14,4 +14,4 @@ python train.py \
 --base_lr 1e-3 \
 --turn 2 \
 --n_history 1 \
---eval_step 10000
+--eval_step 1000

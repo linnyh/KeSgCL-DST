@@ -1,0 +1,1226 @@
+[
+    {
+        "service_name": "hotel",
+        "slots": [
+            {
+                "name": "hotel-pricerange",
+                "description": "price budget of the hotel",
+                "possible_values": [
+                    "cambridge",
+                    "birmingham new street",
+                    "ely",
+                    "norwich",
+                    "bishops stortford",
+                    "peterborough",
+                    "stevenage",
+                    "broxbourne",
+                    "london liverpool street",
+                    "leicester",
+                    "stansted airport",
+                    "kings lynn",
+                    "london kings cross",
+                    "birmingham",
+                    "do n't care",
+                    "saint johns",
+                    "wandlebury country park",
+                    "liecester",
+                    "panahar",
+                    "cineworld",
+                    "stansted",
+                    "el shaddai",
+                    "lon",
+                    "cafe uno",
+                    "leicaster",
+                    "city hall",
+                    "rosa's bed and breakfast",
+                    "norwhich",
+                    "cam",
+                    "brookshite",
+                    "bro",
+                    "cambrid",
+                    "arbu",
+                    "aylesbray lodge guest",
+                    "alpha-milton",
+                    "a",
+                    "london",
+                    "hamilton lodge",
+                    "duxford",
+                    "camboats"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-type",
+                "description": "what is the type of the hotel",
+                "possible_values": [
+                    "guesthouse",
+                    "hotel"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-parking",
+                "description": "whether the hotel has parking",
+                "possible_values": [
+                    "yes",
+                    "do n't care",
+                    "no",
+                    "free"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-bookday",
+                "description": "day of the hotel booking",
+                "possible_values": [
+                    "monday",
+                    "tuesday",
+                    "wednesday",
+                    "thursday",
+                    "friday",
+                    "saturday",
+                    "sunday"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-bookpeople",
+                "description": "number of people for the hotel booking",
+                "possible_values": [
+                    "6",
+                    "1",
+                    "3",
+                    "5",
+                    "4",
+                    "2",
+                    "8",
+                    "7",
+                    "six",
+                    "3."
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-bookstay",
+                "description": "length of stay at the hotel",
+                "possible_values": [
+                    "2",
+                    "1",
+                    "4",
+                    "5",
+                    "3",
+                    "8",
+                    "7",
+                    "6",
+                    "six"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-stars",
+                "description": "star rating of the hotel",
+                "possible_values": [
+                    "4",
+                    "2",
+                    "0",
+                    "3",
+                    "do n't care",
+                    "1",
+                    "5"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-internet",
+                "description": "whether the hotel has internet",
+                "possible_values": [
+                    "yes",
+                    "do n't care",
+                    "no"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-name",
+                "description": "name of the hotel",
+                "possible_values": [],
+                "is_categorical": false
+            },
+            {
+                "name": "hotel-area",
+                "description": "area or place of the hotel",
+                "possible_values": [
+                    "east",
+                    "north",
+                    "centre",
+                    "south",
+                    "west",
+                    "do n't care",
+                    "southern aylesbray",
+                    "cambridge",
+                    "el shaddai",
+                    "stevenage",
+                    "place to be a guesthouse",
+                    "peterborough",
+                    "bishops stortford",
+                    "cheap"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "hotel-address",
+                "description": "address of the hotel",
+                "is_categorical": false
+            },
+            {
+                "name": "hotel-phone",
+                "description": "phone number of the hotel",
+                "is_categorical": false
+            },
+            {
+                "name": "hotel-postcode",
+                "description": "postal code of the hotel",
+                "is_categorical": false
+            },
+            {
+                "name": "hotel-ref",
+                "description": "reference number of the hotel booking",
+                "is_categorical": false
+            }
+        ],
+        "description": "hotel reservations and vacation stays",
+        "intents": [
+            {
+                "name": "find_hotel",
+                "description": "search for a hotel to stay in",
+                "is_transactional": false,
+                "required_slots": [],
+                "optional_slots": {
+                    "hotel-pricerange": "dontcare",
+                    "hotel-type": "dontcare",
+                    "hotel-parking": "dontcare",
+                    "hotel-bookday": "dontcare",
+                    "hotel-bookpeople": "dontcare",
+                    "hotel-bookstay": "dontcare",
+                    "hotel-stars": "dontcare",
+                    "hotel-internet": "dontcare",
+                    "hotel-name": "dontcare",
+                    "hotel-area": "dontcare"
+                }
+            },
+            {
+                "name": "book_hotel",
+                "description": "book a hotel to stay in",
+                "is_transactional": true,
+                "required_slots": [],
+                "optional_slots": {
+                    "hotel-pricerange": "dontcare",
+                    "hotel-type": "dontcare",
+                    "hotel-parking": "dontcare",
+                    "hotel-bookday": "dontcare",
+                    "hotel-bookpeople": "dontcare",
+                    "hotel-bookstay": "dontcare",
+                    "hotel-stars": "dontcare",
+                    "hotel-internet": "dontcare",
+                    "hotel-name": "dontcare",
+                    "hotel-area": "dontcare"
+                }
+            }
+        ]
+    },
+    {
+        "service_name": "train",
+        "slots": [
+            {
+                "name": "train-arriveby",
+                "description": "arrival time of the train",
+                "possible_values": [
+                    "1",
+                    "5",
+                    "8",
+                    "6",
+                    "2",
+                    "7",
+                    "4",
+                    "3",
+                    "0",
+                    "9",
+                    "15",
+                    "`1",
+                    "10"
+                ],
+                "is_categorical": false
+            },
+            {
+                "name": "train-departure",
+                "description": "departure location of the train",
+                "possible_values": [
+                    "cambridge",
+                    "birmingham new street",
+                    "ely",
+                    "norwich",
+                    "bishops stortford",
+                    "peterborough",
+                    "stevenage",
+                    "broxbourne",
+                    "london liverpool street",
+                    "leicester",
+                    "stansted airport",
+                    "kings lynn",
+                    "london kings cross",
+                    "birmingham",
+                    "do n't care",
+                    "saint johns",
+                    "wandlebury country park",
+                    "liecester",
+                    "panahar",
+                    "cineworld",
+                    "stansted",
+                    "el shaddai",
+                    "lon",
+                    "cafe uno",
+                    "leicaster",
+                    "city hall",
+                    "rosa's bed and breakfast",
+                    "norwhich",
+                    "cam",
+                    "brookshite",
+                    "bro",
+                    "cambrid",
+                    "arbu",
+                    "aylesbray lodge guest",
+                    "alpha-milton",
+                    "a",
+                    "london",
+                    "hamilton lodge",
+                    "duxford",
+                    "camboats"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "train-day",
+                "description": "day of the train",
+                "possible_values": [
+                    "friday",
+                    "wednesday",
+                    "monday",
+                    "saturday",
+                    "thursday",
+                    "tuesday",
+                    "sunday",
+                    "do n't care",
+                    "fr",
+                    "n",
+                    "we",
+                    "train"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "train-bookpeople",
+                "description": "how many train tickets you need",
+                "possible_values": [
+                    "1",
+                    "5",
+                    "8",
+                    "6",
+                    "2",
+                    "7",
+                    "4",
+                    "3",
+                    "0",
+                    "9",
+                    "15",
+                    "`1",
+                    "10"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "train-leaveat",
+                "description": "leaving time for the train",
+                "possible_values": [
+                    "turkish",
+                    "indian",
+                    "chinese",
+                    "seafood",
+                    "italian",
+                    "british",
+                    "australasian",
+                    "australian",
+                    "asian oriental",
+                    "thai",
+                    "vegetarian",
+                    "modern european",
+                    "gastropub",
+                    "south indian",
+                    "european",
+                    "portuguese",
+                    "swiss",
+                    "crossover",
+                    "catalan",
+                    "french",
+                    "do n't care",
+                    "mexican",
+                    "welsh",
+                    "korean",
+                    "tuscan",
+                    "new zealand",
+                    "molecular gastronomy",
+                    "eritrean",
+                    "british food",
+                    "the americas",
+                    "north american",
+                    "spanish",
+                    "barbeque",
+                    "persian",
+                    "greek",
+                    "lebanese",
+                    "vietnamese",
+                    "belgian",
+                    "creative",
+                    "jamaican",
+                    "scottish",
+                    "cuban",
+                    "japanese",
+                    "sri lankan",
+                    "light bites",
+                    "moroccan",
+                    "latin american",
+                    "african",
+                    "basque",
+                    "modern global",
+                    "halal",
+                    "mediterranean",
+                    "bistro",
+                    "international",
+                    "unusual",
+                    "north indian",
+                    "modern eclectic",
+                    "danish",
+                    "afghan",
+                    "world",
+                    "northern european",
+                    "german",
+                    "cantonese",
+                    "irish",
+                    "romanian",
+                    "russian",
+                    "english",
+                    "corsica",
+                    "steakhouse",
+                    "hungarian",
+                    "singaporean",
+                    "austrian",
+                    "venetian",
+                    "ital",
+                    "polynesian",
+                    "kosher",
+                    "swedish",
+                    "scandinavian",
+                    "modern american",
+                    "christmas",
+                    "malaysian",
+                    "north african",
+                    "brazilian",
+                    "canapes",
+                    "caribbean",
+                    "south african",
+                    "traditional",
+                    "indonesian",
+                    "middle eastern",
+                    "fusion",
+                    "polish",
+                    "asian",
+                    "not mentionedc",
+                    "afternoon tea",
+                    "eastern european",
+                    "panasian",
+                    "kor",
+                    "gastro pub",
+                    "american",
+                    "pizza",
+                    "modern  european",
+                    "modern english"
+                ],
+                "is_categorical": false
+            },
+            {
+                "name": "train-destination",
+                "description": "destination of the train",
+                "possible_values": [
+                    "bishops stortford",
+                    "cambridge",
+                    "ely",
+                    "peterborough",
+                    "norwich",
+                    "london liverpool street",
+                    "leicester",
+                    "kings lynn",
+                    "broxbourne",
+                    "birmingham new street",
+                    "london kings cross",
+                    "stansted airport",
+                    "stevenage",
+                    "lecester",
+                    "bishop stortford",
+                    "north",
+                    "willi",
+                    "curry prince",
+                    "bournemouth",
+                    "centre",
+                    "no",
+                    "bishops storford",
+                    "city centre north",
+                    "taj tandoori",
+                    "petersborough",
+                    "huntington marriott",
+                    "hol",
+                    "gonv",
+                    "liverpool",
+                    "huntingdon marriott hotel",
+                    "gourmet burger kitchen",
+                    "the copper kettle"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "train-trainid",
+                "description": "id of the train",
+                "is_categorical": false
+            },
+            {
+                "name": "train-ref",
+                "description": "reference number of the train booking",
+                "is_categorical": false
+            },
+            {
+                "name": "train-price",
+                "description": "price of the train",
+                "is_categorical": false
+            },
+            {
+                "name": "train-duration",
+                "description": "duration of the travel",
+                "is_categorical": false
+            }
+        ],
+        "description": "find trains that take you to places",
+        "intents": [
+            {
+                "name": "find_train",
+                "description": "search for trains that take you places",
+                "is_transactional": false,
+                "required_slots": [],
+                "optional_slots": {
+                    "train-destination": "dontcare",
+                    "train-arriveby": "dontcare",
+                    "train-departure": "dontcare",
+                    "train-day": "dontcare",
+                    "train-bookpeople": "dontcare",
+                    "train-leaveat": "dontcare"
+                }
+            },
+            {
+                "name": "book_train",
+                "description": "book train tickets",
+                "is_transactional": true,
+                "required_slots": [],
+                "optional_slots": {
+                    "train-destination": "dontcare",
+                    "train-arriveby": "dontcare",
+                    "train-departure": "dontcare",
+                    "train-day": "dontcare",
+                    "train-bookpeople": "dontcare",
+                    "train-leaveat": "dontcare"
+                }
+            }
+        ]
+    },
+    {
+        "service_name": "attraction",
+        "slots": [
+            {
+                "name": "attraction-area",
+                "description": "area to search for attractions",
+                "possible_values": [
+                    "centre",
+                    "west",
+                    "north",
+                    "south",
+                    "east",
+                    "do n't care",
+                    "cambridge"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "attraction-name",
+                "description": "name of the attraction",
+                "possible_values": [],
+                "is_categorical": false
+            },
+            {
+                "name": "attraction-type",
+                "description": "type of the attraction",
+                "possible_values": [
+                    "museum",
+                    "entertainment",
+                    "college",
+                    "nightclub",
+                    "swimming pool",
+                    "multiple sports",
+                    "architecture",
+                    "cinema",
+                    "boat",
+                    "theatre",
+                    "concert hall",
+                    "park",
+                    "do n't care",
+                    "local site",
+                    "hotspot",
+                    "church",
+                    "special"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "attraction-entrancefee",
+                "description": "how much is the entrance fee",
+                "is_categorical": false
+            },
+            {
+                "name": "attraction-openhours",
+                "description": "open hours of the attraction",
+                "is_categorical": false
+            },
+            {
+                "name": "attraction-address",
+                "description": "address of the attraction",
+                "is_categorical": false
+            },
+            {
+                "name": "attraction-phone",
+                "description": "phone number of the attraction",
+                "is_categorical": false
+            },
+            {
+                "name": "attraction-postcode",
+                "description": "postal code of the attraction",
+                "is_categorical": false
+            }
+        ],
+        "description": "find touristy stuff to do around you",
+        "intents": [
+            {
+                "name": "find_attraction",
+                "description": "search for places to see for leisure",
+                "is_transactional": false,
+                "required_slots": [],
+                "optional_slots": {
+                    "attraction-area": "dontcare",
+                    "attraction-name": "dontcare",
+                    "attraction-type": "dontcare"
+                }
+            }
+        ]
+    },
+    {
+        "service_name": "restaurant",
+        "slots": [
+            {
+                "name": "restaurant-pricerange",
+                "description": "price budget for the restaurant",
+                "possible_values": [
+                    "city centre north b and b",
+                    "express by holiday inn cambridge",
+                    "el shaddai",
+                    "a and b guest house",
+                    "arbury lodge guest house",
+                    "university arms hotel",
+                    "kirkwood house",
+                    "autumn house",
+                    "gonville hotel",
+                    "leverton house",
+                    "acorn guest house",
+                    "the cambridge belfry",
+                    "ashley hotel",
+                    "the lensfield hotel",
+                    "finches bed and breakfast",
+                    "worth house",
+                    "wandlebury coutn",
+                    "allenbell",
+                    "rosa's bed and breakfast",
+                    "home from home",
+                    "avalon",
+                    "alpha-milton guest house",
+                    "alexander bed and breakfast",
+                    "cityroomz",
+                    "limehouse",
+                    "archway house",
+                    "warkworth house",
+                    "lovell lodge",
+                    "do n't care",
+                    "aylesbray lodge guest house",
+                    "carolina bed and breakfast",
+                    "huntingdon marriott hotel",
+                    "hobsons house",
+                    "hamilton lodge",
+                    "whale",
+                    "alp",
+                    "cambridge belfry",
+                    "bridge guest house",
+                    "gonville",
+                    "cambridge",
+                    "acorn  house",
+                    "to",
+                    "n",
+                    "city center north",
+                    "caffe",
+                    "express by",
+                    "clare",
+                    "acorn",
+                    "sou",
+                    "north b and b",
+                    "a",
+                    "lensfield",
+                    "city stop rest",
+                    "kirkwood",
+                    "levert",
+                    "anatolia",
+                    "huntingdon marriot hotel",
+                    "cherr",
+                    "huntingd",
+                    "nusha",
+                    "aylesbray lodge",
+                    "royal spice",
+                    "la margherit",
+                    "hotel",
+                    "gall",
+                    "city roomz",
+                    "alexander",
+                    "caridge belfrey",
+                    "yes",
+                    "me",
+                    "nus",
+                    "alexander bed & breakfast",
+                    "the allenbell.",
+                    "the allenbell",
+                    "gra",
+                    "the",
+                    "cambridg",
+                    "lensfield hotel",
+                    "tandoori palace",
+                    "huntingdon hotel",
+                    "autumn house.",
+                    "doubletree by hilton cambridge",
+                    "ca"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "restaurant-area",
+                "description": "area or place of the restaurant",
+                "possible_values": [
+                    "centre",
+                    "east",
+                    "north",
+                    "south",
+                    "west"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "restaurant-food",
+                "description": "the cuisine of the restaurant you are looking for",
+                "is_categorical": false
+            },
+            {
+                "name": "restaurant-name",
+                "description": "name of the restaurant",
+                "possible_values": [
+                    "meze bar restaurant",
+                    "indian",
+                    "pizza hut city centre",
+                    "the good luck chinese food takeaway",
+                    "caffe uno",
+                    "the gardenia",
+                    "the oak bistro",
+                    "do n't care",
+                    "sala thong",
+                    "thanh binh",
+                    "riverside brasserie",
+                    "cambri",
+                    "pizza express",
+                    "yippee noodle bar",
+                    "curry prince",
+                    "midsummer house restaurant",
+                    "cote",
+                    "restaurant alimentum",
+                    "nandos city centre",
+                    "chiquito restaurant bar",
+                    "maharajah tandoori restaurant",
+                    "yu garden",
+                    "bangkok city",
+                    "copper kettle",
+                    "backstreet bistro",
+                    "the golden curry",
+                    "don pasquale pizzeria",
+                    "sesame restaurant and bar",
+                    "charlie",
+                    "the cow pizza kitchen and bar",
+                    "india house",
+                    "loch fyne",
+                    "eraina",
+                    "royal spice",
+                    "prezzo",
+                    "curry king",
+                    "the nirala",
+                    "curry garden",
+                    "zizzi cambridge",
+                    "da vinci pizzeria",
+                    "jinling noodle bar",
+                    "la raza",
+                    "cotto",
+                    "efes restaurant",
+                    "taj tandoori",
+                    "golden wok",
+                    "charlie chan",
+                    "kohinoor",
+                    "bedouin",
+                    "the cambridge chop house",
+                    "stazione restaurant and coffee bar",
+                    "graffiti",
+                    "pizza hut",
+                    "la mimosa",
+                    "city stop",
+                    "grafton hotel restaurant",
+                    "pizza hut fen ditton",
+                    "ba",
+                    "frankie and bennys",
+                    "rajmahal",
+                    "rice boat",
+                    "the missing sock",
+                    "the varsity restaurant",
+                    "panahar",
+                    "nandos",
+                    "sitar tandoori",
+                    "oak bistro",
+                    "scudamores punt",
+                    "lovel",
+                    "anatolia",
+                    "clowns cafe",
+                    "gourmet burger kitchen",
+                    "tandoori palace",
+                    "ali baba",
+                    "darrys cookhouse and wine shop",
+                    "hakka",
+                    "peking restaurant",
+                    "de luca cucina and bar",
+                    "the slug and lettuce",
+                    "city stop restaurant",
+                    "kymmoy",
+                    "cambridge lodge restaurant",
+                    "tandoori",
+                    "bloomsbury restaurant",
+                    "ugly duckling",
+                    "hk fusion",
+                    "pizza hut cherry hinton",
+                    "fitzbillies restaurant",
+                    "hotel du vin and bistro",
+                    "no",
+                    "restaurant two two",
+                    "dojo noodle bar",
+                    "fi",
+                    "the copper kettle",
+                    "michaelhouse cafe",
+                    "restaurant one seven",
+                    "the hotpot",
+                    "royal standard",
+                    "lev",
+                    "the river bar steakhouse and grill",
+                    "pipasha restaurant",
+                    "golden curry",
+                    "saigon city",
+                    "pizza express fen ditton",
+                    "little seoul",
+                    "meghna",
+                    "saffron brasserie",
+                    "j restaurant",
+                    "la margherita",
+                    "the lucky star",
+                    "lan hong house",
+                    "hotpot",
+                    "ask",
+                    "the gandhi",
+                    "cocum",
+                    "golden house",
+                    "la tasca",
+                    "shanghai family restaurant",
+                    "worth house",
+                    "wagamama",
+                    "galleria",
+                    "lo",
+                    "travellers rest",
+                    "mahal of cambridge",
+                    "archway",
+                    "molecular gastonomy",
+                    "european",
+                    "saint johns chop house",
+                    "anatolia and efes restaurant",
+                    "shiraz restaurant",
+                    "nirala",
+                    "not metioned",
+                    "cott",
+                    "cambridge chop house",
+                    "bridge",
+                    "lucky star",
+                    "clu",
+                    "tang chinese",
+                    "the",
+                    "golden house                            golden house",
+                    "rice house",
+                    "limehouse",
+                    "clowns",
+                    "restaurant",
+                    "parkside pools",
+                    "the dojo noodle bar",
+                    "nusha",
+                    "hobson house",
+                    "au",
+                    "curry queen",
+                    "el shaddai",
+                    "old school",
+                    "el",
+                    "cam",
+                    "yes",
+                    "gardenia",
+                    "fin",
+                    "efes",
+                    "slug and lettuce",
+                    "camboats",
+                    "missing sock",
+                    "grafton",
+                    "nus",
+                    "cambridge lodge",
+                    "fitzbillies",
+                    "hamilton lodge",
+                    "gastropub",
+                    "funky",
+                    "cow pizza",
+                    "ashley",
+                    "ros",
+                    "hobso",
+                    "kitchen and bar",
+                    "d",
+                    "cityr",
+                    "pipasha",
+                    "seasame restaurant and bar",
+                    "the alex",
+                    "hu",
+                    "one seven",
+                    "shanghi family restaurant",
+                    "cambridge be",
+                    "dif",
+                    "margherita",
+                    "ac",
+                    "bri",
+                    "india",
+                    "adden",
+                    "ian hong house"
+                ],
+                "is_categorical": false
+            },
+            {
+                "name": "restaurant-bookday",
+                "description": "day of the restaurant booking",
+                "possible_values": [
+                    "thursday",
+                    "wednesday",
+                    "friday",
+                    "monday",
+                    "sunday",
+                    "saturday",
+                    "tuesday",
+                    "thur",
+                    "not given",
+                    "w"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "restaurant-bookpeople",
+                "description": "how many people for the restaurant reservation",
+                "possible_values": [
+                    "2",
+                    "3",
+                    "1",
+                    "5",
+                    "6",
+                    "4",
+                    "7",
+                    "8"
+                ],
+                "is_categorical": true
+            },
+            {
+                "name": "restaurant-booktime",
+                "description": "time of the restaurant booking",
+                "possible_values": [],
+                "is_categorical": false
+            },
+            {
+                "name": "restaurant-address",
+                "description": "address of the restaurant",
+                "is_categorical": false
+            },
+            {
+                "name": "restaurant-phone",
+                "description": "phone number of the restaurant",
+                "is_categorical": false
+            },
+            {
+                "name": "restaurant-postcode",
+                "description": "postal code of the restaurant",
+                "is_categorical": false
+            },
+            {
+                "name": "restaurant-ref",
+                "description": "reference number of the restaurant booking",
+                "is_categorical": false
+            }
+        ],
+        "description": "find places to dine and whet your appetite",
+        "intents": [
+            {
+                "name": "find_restaurant",
+                "description": "search for places to wine and dine",
+                "is_transactional": false,
+                "required_slots": [],
+                "optional_slots": {
+                    "restaurant-pricerange": "dontcare",
+                    "restaurant-area": "dontcare",
+                    "restaurant-food": "dontcare",
+                    "restaurant-name": "dontcare",
+                    "restaurant-bookday": "dontcare",
+                    "restaurant-bookpeople": "dontcare",
+                    "restaurant-booktime": "dontcare"
+                }
+            },
+            {
+                "name": "book_restaurant",
+                "description": "book a table at a restaurant",
+                "is_transactional": true,
+                "required_slots": [],
+                "optional_slots": {
+                    "restaurant-pricerange": "dontcare",
+                    "restaurant-area": "dontcare",
+                    "restaurant-food": "dontcare",
+                    "restaurant-name": "dontcare",
+                    "restaurant-bookday": "dontcare",
+                    "restaurant-bookpeople": "dontcare",
+                    "restaurant-booktime": "dontcare"
+                }
+            }
+        ]
+    },
+    {
+        "service_name": "hospital",
+        "slots": [
+            {
+                "name": "hospital-department",
+                "description": "type of medical care",
+                "possible_values": [],
+                "is_categorical": false
+            },
+            {
+                "name": "hospital-address",
+                "description": "address of the hospital",
+                "is_categorical": false
+            },
+            {
+                "name": "hospital-phone",
+                "description": "phone number of the hospital",
+                "is_categorical": false
+            },
+            {
+                "name": "hospital-postcode",
+                "description": "postal code of the hospital",
+                "is_categorical": false
+            }
+        ],
+        "description": "making you feel better when you are ill",
+        "intents": [
+            {
+                "name": "find_hospital",
+                "description": "search for a medical facility or a doctor",
+                "is_transactional": false,
+                "required_slots": [],
+                "optional_slots": {
+                    "hospital-department": "dontcare"
+                }
+            }
+        ]
+    },
+    {
+        "service_name": "taxi",
+        "slots": [
+            {
+                "name": "taxi-leaveat",
+                "description": "leaving time of taxi",
+                "possible_values": [
+                    "2",
+                    "3",
+                    "1",
+                    "5",
+                    "6",
+                    "4",
+                    "7",
+                    "8"
+                ],
+                "is_categorical": false
+            },
+            {
+                "name": "taxi-destination",
+                "description": "destination of taxi",
+                "possible_values": [],
+                "is_categorical": false
+            },
+            {
+                "name": "taxi-departure",
+                "description": "departure location of taxi",
+                "possible_values": [],
+                "is_categorical": false
+            },
+            {
+                "name": "taxi-arriveby",
+                "description": "arrival time of taxi",
+                "possible_values": [
+                    "london kings cross",
+                    "bishops stortford",
+                    "cambridge",
+                    "kohinoor"
+                ],
+                "is_categorical": false
+            },
+            {
+                "name": "taxi-type",
+                "description": "car type of the taxi",
+                "is_categorical": false
+            },
+            {
+                "name": "taxi-phone",
+                "description": "phone number of the taxi",
+                "is_categorical": false
+            }
+        ],
+        "description": "rent cheap cabs to avoid traffic",
+        "intents": [
+            {
+                "name": "book_taxi",
+                "description": "book taxis to travel between places",
+                "is_transactional": true,
+                "required_slots": [],
+                "optional_slots": {
+                    "taxi-leaveat": "dontcare",
+                    "taxi-destination": "dontcare",
+                    "taxi-departure": "dontcare",
+                    "taxi-arriveby": "dontcare"
+                }
+            }
+        ]
+    },
+    {
+        "service_name": "bus",
+        "slots": [
+            {
+                "name": "bus-departure",
+                "description": "departure location of bus",
+                "possible_values": [
+                    "cambridge"
+                ],
+                "is_categorical": false
+            },
+            {
+                "name": "bus-destination",
+                "description": "destination of bus",
+                "possible_values": [
+                    "london kings cross",
+                    "bishops stortford",
+                    "cambridge",
+                    "kohinoor"
+                ],
+                "is_categorical": false
+            },
+            {
+                "name": "bus-leaveat",
+                "description": "leaving time of bus",
+                "is_categorical": false
+            },
+            {
+                "name": "bus-day",
+                "description": "day to use the bus tickets",
+                "possible_values": [
+                    "wednesday"
+                ],
+                "is_categorical": true
+            }
+        ],
+        "description": "bus service for traveling",
+        "intents": [
+            {
+                "name": "find_bus",
+                "description": "search for a bus",
+                "is_transactional": false,
+                "required_slots": [],
+                "optional_slots": {
+                    "bus-departure": "dontcare",
+                    "bus-destination": "dontcare",
+                    "bus-day": "dontcare",
+                    "bus-leaveat": "dontcare"
+                }
+            }
+        ]
+    },
+    {
+        "service_name": "police",
+        "slots": [
+            {
+                "name": "police-address",
+                "description": "address of the police station",
+                "is_categorical": false
+            },
+            {
+                "name": "police-phone",
+                "description": "phone number of the police station",
+                "is_categorical": false
+            },
+            {
+                "name": "police-postcode",
+                "description": "postal code of the police station",
+                "is_categorical": false
+            },
+            {
+                "name": "police-name",
+                "description": "name of the police station",
+                "possible_values": [
+                    "parkside police station"
+                ],
+                "is_categorical": true
+            }
+        ],
+        "description": "police station",
+        "intents": [
+            {
+                "name": "police",
+                "description": "search for police station",
+                "is_transactional": false,
+                "required_slots": [],
+                "optional_slots": {
+                    "police-name": "dontcare"
+                }
+            }
+        ]
+    }
+]

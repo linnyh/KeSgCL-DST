@@ -250,18 +250,18 @@ def joint_evaluation(start_prediction, end_prediction, gen_prediction, op_predic
     op_prec = op_update_correct / op_update_guess if op_update_guess != 0 else 0
     op_recall = op_update_correct / op_update_gold if op_update_gold != 0 else 0
     op_F1 = 2 * (op_prec * op_recall) / (op_prec + op_recall) if op_prec + op_recall != 0 else 0
-    # print(op_update_correct)
-    # print(op_update_gold)
-    # print(op_update_guess)
-    # print(gen_correct)
-    # print(gen_guess)
-    # print(catecorrect)
-    # print(noncatecorrect)
-    # print(domain_correct)
-    # print(joint_correct)
-    # print(len(op_prediction))
-    # print("Update score: operation precision: %.3f, operation_recall : %.3f,operation F1:%.3f" % (
-    #     op_prec, op_recall, op_F1))
+    print(op_update_correct)
+    print(op_update_gold)
+    print(op_update_guess)
+    print(gen_correct)
+    print(gen_guess)
+    print(catecorrect)
+    print(noncatecorrect)
+    print(domain_correct)
+    print(joint_correct)
+    print(len(op_prediction))
+    print("Update score: operation precision: %.3f, operation_recall : %.3f,operation F1:%.3f" % (
+        op_prec, op_recall, op_F1))
     return gen_acc, op_acc, op_update_guess, op_update_gold, op_update_correct, gen_correct, gen_guess, cate_slot_correct, nocate_slot_correct, catecorrect, noncatecorrect, domain_correct, joint_correct, len(
         op_prediction)
 

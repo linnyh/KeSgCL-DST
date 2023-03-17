@@ -4,6 +4,8 @@ import sys
 print(sys.path)
 sys.path.append("/home/fzus/lyh/DiCos/models/")
 
+import nltk
+
 import argparse
 import json
 import logging
@@ -12,6 +14,7 @@ import os
 import random
 import datetime
 import torch.nn as nn
+import spacy
 
 import numpy as np
 import torch
@@ -19,6 +22,33 @@ import torch.nn.functional as F
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler, TensorDataset)
 import megengine as mge
 import megengine.autodiff as ad
+import gc
+from utils.lion import *
+
+# 可视化相关
+import visdom
+vis = visdom.Visdom(env='train')
+opt = {
+    'xlable': 'step',
+    'ylabel': 'loss_value',
+    'title': 'mean_loss'
+}
+opt_lr = {
+    'xlable': 'step',
+    'ylabel': 'lr',
+    'title': 'learning rate'
+}
+loss_window = vis.line(
+    X = [0],
+    Y = [0],
+    opts=opt
+)
+lr_window = vis.line(
+    X=[0],
+    Y=[0],
+    opts=opt_lr
+)
+
 
 mge.dtr.enable()
 
@@ -29,9 +59,12 @@ try:
 except:
     from tensorboardX import SummaryWriter
 
+writer = SummaryWriter('/home/fzus/lyh/DiCoS/log/' + datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+
 from tqdm import tqdm
 from models.generator import Generator
 from utils import helper
+from utils.data_kb_util import *
 from utils.data_utils import prepare_dataset, MultiWozDataset
 from utils.constant import track_slots, ansvocab, slot_map, n_slot, TURN_SPLIT, TEST_TURN_SPLIT
 from utils.data_utils import make_slot_meta, domain2id, OP_SET, make_turn_label, postprocessing
@@ -56,6 +89,11 @@ logger_trainInfo.info("")
 
 csv.field_size_limit(sys.maxsize)
 logger = logging.getLogger(__name__)
+
+nlp = spacy.load('en_core_web_trf')
+f = open("/home/fzus/lyh/entity_en.json", 'r', encoding='UTF-8')
+entities_dict = json.load(f)
+entities_dict = DataDict(entities_dict)
 
 
 def set_seed(args):
@@ -400,30 +438,30 @@ def main():
     parser.add_argument("--vocab_path", default='assets/vocab.txt', type=str)
     parser.add_argument("--save_dir", default='saved_models', type=str)
     parser.add_argument("--load_model", default=False, action='store_true')
-    parser.add_argument("--load_ckpt_epoch", default='checkpoint_epoch_21.bin', type=str)
+    parser.add_argument("--load_ckpt_epoch", default='checkpoint_epoch_5996_with_ke.bin', type=str)
     parser.add_argument("--load_test_op_data_path", default='cls_score_test_state_update_predictor_output.json',
                         type=str)
     parser.add_argument("--random_seed", default=42, type=int)
     parser.add_argument("--num_workers", default=4, type=int)
-    parser.add_argument("--batch_size", default=1, type=int)    # real batch size
+    parser.add_argument("--batch_size", default=4, type=int)    # real batch size
     parser.add_argument("--enc_warmup", default=0.01, type=float)
     parser.add_argument("--dec_warmup", default=0.01, type=float)
     parser.add_argument("--enc_lr", default=5e-6, type=float) # 5e-6
-    parser.add_argument("--base_lr", default=1e-4, type=float) # 1e-4
+    parser.add_argument("--base_lr", default=2e-4, type=float) # 1e-4 2e-4
     parser.add_argument("--n_epochs", default=30, type=int) # 训练代数 10
     parser.add_argument("--eval_epoch", default=1, type=int)
     parser.add_argument("--eval_step", default=5, type=int)
     parser.add_argument("--turn", default=2, type=int)
     parser.add_argument("--op_code", default="2", type=str)
     parser.add_argument("--slot_token", default="[SLOT]", type=str)
-    parser.add_argument("--dropout", default=0.0, type=float)
+    parser.add_argument("--dropout", default=0.0, type=float) # 0.0
     parser.add_argument("--hidden_dropout_prob", default=0.0, type=float)
     parser.add_argument("--attention_probs_dropout_prob", default=0.1, type=float)
     parser.add_argument("--decoder_teacher_forcing", default=0.5, type=float)
     parser.add_argument("--word_dropout", default=0.1, type=float)
     parser.add_argument("--not_shuffle_state", default=True, action='store_true')
 
-    parser.add_argument("--n_history", default=1, type=int)
+    parser.add_argument("--n_history", default=3, type=int)
     parser.add_argument("--max_seq_length", default=256, type=int)
     parser.add_argument("--sketch_weight", default=0.55, type=float)
     parser.add_argument("--answer_weight", default=0.6, type=float)
@@ -432,7 +470,14 @@ def main():
     parser.add_argument("--msg", default=None, type=str)
     
     parser.add_argument("--clearning", default=False, type=bool)
+    parser.add_argument("--m_gcn", default=True, type=bool)
     parser.add_argument("--syn_guide", default=True, type=bool)
+    parser.add_argument("--knowledge_enhance", default=True, type=bool)
+    parser.add_argument("--use_clr", default=False, type=bool)
+    parser.add_argument("--use_lion_opt", default=False, type=bool)
+    
+    
+    
 
     args = parser.parse_args()
 
@@ -484,10 +529,13 @@ def main():
     criterion = nn.MSELoss()
 
     _, slot_meta = make_slot_meta(ontology)
+
+    
+
     with torch.cuda.device(0):
         op2id = OP_SET[args.op_code]  # 槽位选择的标签
 
-        rng = random.Random(args.random_seed)
+        rng = random.random(args.random_seed)
         print(op2id)
         logger_trainInfo.info(op2id)
         tokenizer = AlbertTokenizer.from_pretrained(args.model_name_or_path + "spiece.model")
@@ -496,6 +544,9 @@ def main():
         args.vocab_size = len(tokenizer)  # 词表大小
         ontology, slot_mm, esm_ans_vocab = fixontology(slot_meta, turn, tokenizer)
         ans_vocab, ans_vocab_nd, cate_mask = mask_ans_vocab(ontology, slot_meta, tokenizer)
+
+        # nltk 相关配置
+        
 
         if turn == 2:
             train_op_data_path = None
@@ -593,10 +644,18 @@ def main():
                             id(p) not in bert_params_ids and any(nd in n for nd in no_decay)], 'weight_decay': 0.0,
                  'lr': args.base_lr}]
 
-            enc_optimizer = AdamW(enc_optimizer_grouped_parameters, lr=args.base_lr)
+            if args.use_lion_opt:
+                enc_optimizer = Lion(enc_optimizer_grouped_parameters, lr=args.base_lr)
+            else:
+                enc_optimizer = AdamW(enc_optimizer_grouped_parameters, lr=args.base_lr)
             # cl_optimizer = AdamW()
 
-            enc_scheduler = get_linear_schedule_with_warmup(enc_optimizer,
+            
+            # CLR
+            if args.use_clr:
+                enc_scheduler = torch.optim.lr_scheduler.CyclicLR(enc_optimizer, base_lr=1e-4, max_lr=4e-4, step_size_up=2620)
+            else:
+                enc_scheduler = get_linear_schedule_with_warmup(enc_optimizer,
                                                             num_warmup_steps=int(num_train_steps * args.enc_warmup),
                                                             num_training_steps=num_train_steps)  # 线性warmup
 
@@ -607,9 +666,11 @@ def main():
             loss = 0
             sketchy_weight, answer_weight, generation_weight, extraction_weight = args.sketch_weight, args.answer_weight, args.generation_weight, args.extraction_weight
             verify_weight = 1 - sketchy_weight
+            global_step = 0
             for epoch in range(args.n_epochs):
                 batch_loss = []
                 for step, batch in enumerate(tqdm(train_dataloader)):
+                    global_step += 1
                     batch = [b.to(device) if not isinstance(b, int) and not isinstance(b, list) else b for b in batch]
                     input_ids, input_mask, slot_mask, segment_ids, state_position_ids, op_ids, pred_ops, domain_ids, gen_ids, start_position, end_position, max_value, max_update, slot_ans_ids, start_idx, end_idx, position_ids, sample_mm, generate_turn, generate_mask, ref_slot, gold_ans_label, sid, update_current_mm, slot_all_connect, update_mm, slot_domain_connect = batch
                     if input_ids.numel() == 0 or sample_mm.numel() == 0:
@@ -652,7 +713,7 @@ def main():
                         loss = loss_classifier + loss_extractor  + loss_grace
                         loss = math.log(input_ids.shape[0], 8) * loss
 
-                        loss.backward(retain_graph=True)         # 损失反向传播
+                        loss.backward(retain_graph=False)         # 损失反向传播
                         for name, par in model.named_parameters():
                             if par.requires_grad and par.grad is not None:
                                 if torch.sum(torch.isnan(par.grad)) != 0:
@@ -660,12 +721,21 @@ def main():
 
                     batch_loss.append(loss.item())
                     del batch
-                    torch.cuda.empty_cache()
+                    # gc.collect()
+                    torch.cuda.empty_cache() # 37 - 31
                     torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
                     enc_optimizer.step()
                     enc_scheduler.step()
                     model.zero_grad()
+
+                    vis.line(X=[global_step], Y=[np.mean(batch_loss)], win=loss_window, opts=opt, update='append')
+                    vis.line(X=[global_step], Y=[enc_optimizer.state_dict()['param_groups'][0]['lr']], win=lr_window, opts=opt_lr, update='append')
+                    
                     if step % 100 == 0:
+                        writer.add_scalar('train_mean_loss', np.mean(batch_loss), step)
+                        writer.add_scalar('lr', enc_optimizer.state_dict()['param_groups'][0]['lr'], step)
+
+
                         print("[%d/%d] [%d/%d] mean_loss : %.3f" \
                               % (epoch + 1, args.n_epochs, step,
                                  len(train_dataloader), np.mean(batch_loss),), end='\t')
@@ -688,7 +758,7 @@ def main():
                         batch_loss = []
                     # del batch_loss, batch, input_ids
                 if True:
-                    with torch.no_grad(): # 训练无需梯度
+                    with torch.no_grad(): # 测试无需梯度
                         joint_acc, catejoint_acc, noncatejoint_acc = evaluate(dev_dataloader, model, device, ans_vocab_nd,
                                                                             cate_mask, turn=2, tokenizer=tokenizer,
                                                                             ontology=ontology)
@@ -706,6 +776,7 @@ def main():
                             'scheduler': enc_scheduler.state_dict(),
                             'args': args
                         }
+                        print("开保存最佳模型。。。。。。。")
                         torch.save(params, save_path)
 
                     file_logger.log(
@@ -750,9 +821,10 @@ def main():
                 torch.save(model_to_save.state_dict(), save_path)
 
         else:
-            joint_acc, catejoint_acc, noncatejoint_acc = evaluate(dev_dataloader, model, device, ans_vocab_nd,
-                                                                  cate_mask, turn=2, tokenizer=tokenizer,
-                                                                  ontology=ontology)
+            with torch.no_grad(): # 测试无需梯度
+                        joint_acc, catejoint_acc, noncatejoint_acc = evaluate(dev_dataloader, model, device, ans_vocab_nd,
+                                                                            cate_mask, turn=2, tokenizer=tokenizer,
+                                                                            ontology=ontology)
             print(
                 "Test Result:\tJointAcc: {:.4f}\tCategorical-JointAcc: {:.4f}\tnon-Categorical-JointAcc: {:.4f}".format(
                     joint_acc, catejoint_acc, noncatejoint_acc))
@@ -813,7 +885,8 @@ def evaluate(dev_dataloader, model, device, ans_vocab_nd, cate_mask, turn=2, tok
             # assert len(input_ids) <= TEST_TURN_SPLIT  # test的之前没切分，在这里应该有False的情况出现
             # 测试样本在这里切分
             if len(input_ids) <= TEST_TURN_SPLIT:
-                start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _ = model(input_ids=input_ids,
+                with torch.no_grad():
+                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _ = model(input_ids=input_ids,
                                                                                               token_type_ids=segment_ids,
                                                                                               state_positions=state_position_ids,
                                                                                               attention_mask=input_mask,
@@ -858,7 +931,8 @@ def evaluate(dev_dataloader, model, device, ans_vocab_nd, cate_mask, turn=2, tok
                 tmp_sample_mm = [sample_mm[:TEST_TURN_SPLIT, :, :], sample_mm[TEST_TURN_SPLIT:, :, :]]
 
                 for cnt in range(2):
-                    start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _ = model(
+                    with torch.no_grad():
+                        start_logits, end_logits, gen_scores, _, _, _, fuse_score, input_ids, _ = model(
                         input_ids=tmp_input_ids[cnt],
                         token_type_ids=tmp_segment_ids[cnt],
                         state_positions=tmp_state_position_ids[cnt],

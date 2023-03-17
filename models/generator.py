@@ -1,7 +1,7 @@
 import numpy as np
 import sys
 print(sys.path)
-sys.path.append("/home/fzus/lyh/DiCos/models/")
+sys.path.append("/home/fzus/lyh/DiCoS/models/")
 import torch
 import torch.nn as nn
 from transformers import BertConfig
@@ -16,6 +16,9 @@ import heapq
 from scipy import spatial
 import spacy
 from models.ModelBERT import SGMultiHeadAttention
+from utils.data_utils import global_slot_meta
+import json
+from sklearn.decomposition import PCA
 
 
 class Generator(nn.Module):
@@ -74,16 +77,30 @@ class Generator(nn.Module):
         self.gcn = MultiRelationalGCN(self.hidden_size, layer_nums=2, relation_type=4)  # 多关系卷积网络
         # self.gcn1  = MultiRelationalGCN(self.hidden_size, layer_nums=2, relation_type=4)
 
+        # 知识增强相关
+        self.knowledge_fusion = nn.Sequential(nn.Linear(self.hidden_size+300, self.hidden_size), nn.GELU())
+        self.nlp_trf = spacy.load('en_core_web_trf')
+        # self.pca = PCA(n_components=1024)
+        # self.knowledge_fusion_maxpooling = nn.MaxPool1d(4, )
+        self.focus_ents = ["TIME", "DATE", "CARDINAL", "LOC", "GPE", "FAC", "ORG"]
+        self.get_slot_type = {"TIME": "time", "DATE": "day", "CARDINAL": "number", "LOC": "location", "GPE": "location",
+                  "FAC": "location", "ORG": "location"}
+        with open('/home/fzus/lyh/DiCoS/models/slot_type.json', 'r', encoding='UTF-8') as f:
+            self.slot_type = json.load(f)
+
         # 图对比学习模块
-        self.grace = Model(Encoder, self.hidden_size, self.hidden_size)
-        self.fc1 = torch.nn.Linear(self.hidden_size, self.hidden_size)
-        self.fc2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
+        # self.grace = Model(Encoder, self.hidden_size, self.hidden_size)
+        # self.fc1 = torch.nn.Linear(self.hidden_size, self.hidden_size)
+        # self.fc2 = torch.nn.Linear(self.hidden_size, self.hidden_size)
         self.tau = 0.5
 
         # 句法依赖工具
         self.nlp = spacy.load('en_core_web_sm')
         self.tokenizer = tokenizer
-        self.sg_attn = SGMultiHeadAttention(heads=2, d_model=self.hidden_size)
+        self.sg_attn = SGMultiHeadAttention(heads=4, d_model=self.hidden_size, dropout=0.1)
+
+        # 门控融合
+        self.f_g = nn.Linear(2 * self.hidden_size, self.hidden_size)
 
     def init_ans_vocab(self, ans_vocab):
         slot_ans_size = ans_vocab.size(1)
@@ -246,6 +263,14 @@ class Generator(nn.Module):
                 edges.append((token.text, child.text))
         return edges, pos
 
+    def create_dep_matrix(self, doc, matrix):
+        for token in doc:
+            index = token.i
+            while str(token.dep_) != 'ROOT': # has parent node
+                matrix[index][token.head.i] = 1
+                token = token.head
+        return matrix
+
     def forward(self, input_ids, token_type_ids,
                 state_positions, attention_mask, slot_mask, first_edge_mask, second_edge_mask, third_edge_mask,
                 fourth_edge_mask,
@@ -258,8 +283,33 @@ class Generator(nn.Module):
                                   attention_mask=attention_mask)  # last_state:[1,256,1024] pool_state:[1, 1024]
         sample_mm = sample_mm.float()  # [1,2,30]
         sequence_output, pooled_output = enc_outputs[:2]  # 序列输出[1,256,1024]，[CLS]输出[1, 1024]
+
+        # todo 知识增强
+        if self.args.knowledge_enhance:
+            for i in range(input_ids.shape[0]): # 遍历 batch
+                sent = self.tokenizer.convert_ids_to_tokens(input_ids[i])
+                try:
+                    pad_idx = sent.index("[SLOT]")
+                except ValueError:
+                    pad_idx = 256
+                sent = sent[:pad_idx]
+                stripped_words = list(map(lambda x: x.lstrip('▁').strip("[]").strip("<>"), sent))
+                doc = self.nlp_trf(" ".join(stripped_words))
+                for ent in doc.ents:
+                    if ent.label_ not in self.focus_ents:
+                        continue
+                    begin = ent.start
+                    end = ent.end
+                    if begin < end and begin < pad_idx:
+                        # s = sequence_output[i][begin].shape
+                        sequence_output[i][begin] = self.knowledge_fusion(torch.cat([sequence_output[i][begin], torch.Tensor(list(self.slot_type[self.get_slot_type[ent.label_]])).cuda()], dim=-1))
+                        # sequence_output[i][begin] = self.pca(torch.cat([sequence_output[i][begin], torch.Tensor(list(self.slot_type[self.get_slot_type[ent.label_]]))],dim=-1))
+                        # sequence_output[i][begin] = sequence_output[i][begin] + F.pad(torch.relu(torch.Tensor(list(self.slot_type[self.get_slot_type[ent.label_]]))), (1, 723)).cuda()
+
+
         state_pos = state_positions[:, :, None].expand(-1, -1, sequence_output.size(-1))    # 获取对话状态在序列中的位置
         state_output = torch.gather(sequence_output, 1, state_pos) # 获取对话状态(30 个槽位)的编码特征 [1, 30, 1024]
+
 
         # 三种视角
         '''
@@ -269,7 +319,10 @@ class Generator(nn.Module):
         fourth_edge_mask: [1,30,30]
         '''
         # 将对话状态输入GCN, 输出 slot_node [1,30,1024], dialogue_node [1,1,1024]
-        slot_node, imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask) # # Implicit Mention Oriented Reasoning _:[1,30,1024] imor_output:[1,1,1024]
+        if self.args.m_gcn:
+            slot_node, imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask) # # Implicit Mention Oriented Reasoning _:[1,30,1024] imor_output:[1,1,1024]
+        else:
+            slot_node , imor_output = state_output, pooled_output
 # ====================新增=============================================================
         cl_loss = 0.0
         if self.args.clearning:
@@ -281,17 +334,16 @@ class Generator(nn.Module):
                 current_fourth = self.weighted_random_dropout_adj(state_output[i], fourth_edge_mask[i], p=0.2).detach()
                 new_second_edge_mask.append(current_second)
                 new_fourth_edge_mask.append(current_fourth)
-            second_edge_mask = torch.stack(new_second_edge_mask, dim=0).cuda()
-            fourth_edge_mask = torch.stack(new_fourth_edge_mask, dim=0).cuda()
-            another_slot_node, another_imor_output = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, fourth_edge_mask)
-            cl_loss = self.cl_loss(slot_node, another_slot_node, True, slot_node.shape[0]) # 对比损失
-        
+            new_second_edge_mask = torch.stack(new_second_edge_mask, dim=0).cuda()
+            new_fourth_edge_mask = torch.stack(new_fourth_edge_mask, dim=0).cuda()
+            slot_node1, imor_output1 = self.gcn(state_output, pooled_output, first_edge_mask, new_second_edge_mask, third_edge_mask, fourth_edge_mask)
+            slot_node2, imor_output2 = self.gcn(state_output, pooled_output, first_edge_mask, second_edge_mask, third_edge_mask, new_fourth_edge_mask)
+            cl_loss = self.cl_loss(slot_node1, slot_node2, True, slot_node.shape[0]) # 对比损失
+
 # ====================================================
         slot_text = self.slot_gate(sequence_output, state_output, slot_mask)    # Slot Name - Dialogue History 槽位-对话历史 [1,1,30,1024]
         history_text = self.history_gate(pooled_output)                         # Current Turn - Dialogue History 当前回合-对话历史 [1024]
 
-        
-        
 
 
         # 门控融合得到融合表征
@@ -311,44 +363,79 @@ class Generator(nn.Module):
             fuse_score, input_ids, 2, slot_mask, sample_mm) # ? input_ids:[1,2,256] 表示选取了2个句子 token_type_ids:[1,2,256] selected_score:[1,2,256]
         # 状态生成器部分
         # todo 添加句法指导的注意力模块
-        with torch.no_grad():
-            enc_outputs = self.albert(input_ids=input_ids.reshape(-1, input_ids.shape[-1]).long(), # [2, 256]
+        # with torch.no_grad():
+        input_ids_shape = input_ids.shape
+        sequence_output, pooled_output = self.albert(input_ids=input_ids.reshape(-1, input_ids_shape[-1]).long(), # [2, 256]
                                     token_type_ids=token_type_ids.reshape(-1, input_ids.shape[-1]).long(),
                                     position_ids=position_ids.repeat(sample_mm.shape[1], 1).long(),
-                                    attention_mask=attention_mask.reshape(-1, input_ids.shape[-1]))
-        sequence_output, pooled_output = enc_outputs[:2] # ?  sequence_output:[2,256,1024] pooled_output:[2, 1024]
-        # todo: 对 sequence_output 做句法指导注意力
+                                    attention_mask=attention_mask.reshape(-1, input_ids.shape[-1]))[:2]
+        # sequence_output, pooled_output = enc_outputs[:2] # ?  sequence_output:[2,256,1024] pooled_output:[2, 1024]
+
+        input_ids_shape = input_ids.shape
+        selected_score = torch.reshape(selected_score, [-1, input_ids_shape[-1]]).unsqueeze(-1) # ? [2, 256, 1]
+        sequence_output = selected_score * sequence_output  # ? [2, 256, 1024]
+
+        # todo: 对 sequence_output 做句法增强注意力
+        syn_feature = None
         if self.args.syn_guide:
             # 获取文本
             sentences = []
             docs = []
             adj_matrixs = []
-            inputs = input_ids.reshape(-1, input_ids.shape[-1]).long() # [2, 256]
+            inputs = input_ids.reshape(-1, input_ids_shape[-1]).long() # [2, 256]
             for i in range(inputs.shape[0]):
                 sent = self.tokenizer.convert_ids_to_tokens(inputs[i])
-                stripped_words = list(map(lambda x: x.lstrip('▁').strip("[]").strip("<>"), sent))
                 try:
-                    pad_idx = stripped_words.index("pad")
+                    pad_idx = sent.index("[SLOT]")
                 except ValueError:
                     pad_idx = 256
+                sent = sent[:pad_idx]
+                stripped_words = list(map(lambda x: x.lstrip('▁').strip("[]").strip("<>"), sent))
+                
                 sentences.append(" ".join(stripped_words))
+                # print(sentences[i])
                 docs.append(self.nlp(sentences[i]))
                 adj_matrixs.append(torch.tensor([[0 for _ in range(inputs.shape[-1])] for _ in range(inputs.shape[-1])])) # 每个邻接矩阵大小为 [256,256]
+                # if stripped_words[0] == 'pad':
+                #     continue
                 # 依据依赖关系构建邻接矩阵
                 for token in docs[i]:
-                    for child in token.children:
-                        if token.i < pad_idx and child.i < pad_idx:
-                            adj_matrixs[i][token.i][child.i] = 1
-                            adj_matrixs[i][child.i][token.i] = 1
+                    index = token.i
+                    limit = 0
+                    while token.dep_ != 'ROOT':
+                        limit = limit + 1
+                        if index < pad_idx and token.head.i < pad_idx:
+                            # adj_matrixs[i][index][token.head.i] = 1
+                            adj_matrixs[i][token.head.i][index] = 1
+                        token = token.head
+                        if limit > 100:
+                            break
+                # print(deps)
+                # get the dependence matrix
+                # adj_matrixs[i] = self.create_dep_matrix(docs[i], adj_matrixs[i])
             adj_matrixs = torch.stack(adj_matrixs, dim=0).cuda() # [2, 256, 256]
-            sequence_output = self.sg_attn(sequence_output, sequence_output, sequence_output, adj_matrixs) # 自注意力机制
-            
-        selected_score = torch.reshape(selected_score, [-1, input_ids.shape[-1]]).unsqueeze(-1) # ? [2, 256, 1]
-        sequence_output = selected_score * sequence_output  # ? [2, 256, 1024]
+            syn_feature = self.sg_attn(sequence_output, sequence_output, sequence_output, adj_matrixs) # 自注意力机制
+            del sentences, docs, adj_matrixs, inputs
 
-        sequence_output = sample_mm.transpose(-1, -2).bmm( # ? [1,30,256,1024]
+        if syn_feature is not None:
+            sequence_output = sequence_output + 0.5 * syn_feature
+            # sequence_output = sequence_output + syn_feature
+            # todo 门控融合
+            # sequence_gate = F.sigmoid(self.f_g(torch.cat([sequence_output, syn_feature], dim=-1)))
+            # sequence_output = (sequence_gate * F.relu(sequence_output, inplace=True)) + ((1 - sequence_gate) * syn_feature)
+
+        
+        
+
+        sequence_output = sample_mm.transpose(-1, -2).bmm( # ? [1,30,256,1024] for span
             sequence_output.reshape(sample_mm.shape[:2] + tuple([-1]))).reshape(
             (sample_mm.shape[0], self.n_slot, -1, self.hidden_size))
+
+        # sequence_output_cls = sample_mm.transpose(-1, -2).bmm( # ? [1,30,256,1024] for cls
+        #     sequence_output.reshape(sample_mm.shape[:2] + tuple([-1]))).reshape(
+        #     (sample_mm.shape[0], self.n_slot, -1, self.hidden_size))
+        
+        # 槽值预测
         attention_mask = sample_mm.transpose(-1, -2).bmm(attention_mask) # ? [1,30,256]
         input_ids = sample_mm.transpose(-1, -2).bmm(input_ids)          # ? [1, 30, 256]
         state_pos = state_positions[:, :, :, None].expand(-1, -1, -1, sequence_output.size(-1)).long() # ? [1,30,30,1024]
@@ -367,6 +454,7 @@ class Generator(nn.Module):
         end_logits = end_atten_m.masked_fill(attention_mask.squeeze() == 0, -1e9) # ! [1, 30, 256] 结束点概率分布
         start_logits_softmax = F.softmax(start_logits[:, :, 1:], dim=-1) # ? [1, 30, 255]
         end_logits_softmax = F.softmax(end_logits[:, :, 1:], dim=-1) # ? [1, 30, 255]
+        # 分类预测
         ques_attn = F.softmax((sequence_output.mul(state_output.view(-1, self.n_slot, 1, self.hidden_size)).sum(
             dim=-1) / math.sqrt(self.hidden_size)).masked_fill(attention_mask.squeeze() == 0, -1e9), dim=-1) # ? [1, 30, 256]
         sequence_pool_output = ques_attn.unsqueeze(-1).mul(sequence_output).sum(dim=-2).squeeze() # ? [30, 1024]

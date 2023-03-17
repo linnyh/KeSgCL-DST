@@ -10,8 +10,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 import spacy
+from tqdm import tqdm
 
-nlp = spacy.load('en_core_web_trf')
 
 from utils.data_kb_util import *
 
@@ -20,6 +20,15 @@ from utils.constant import track_slots, n_slot, domain2id, EXPERIMENT_DOMAINS, O
 from .fix_label import fix_general_label_error
 
 flatten = lambda x: [i for s in x for i in s]
+
+global global_entities_dict, global_spacy_nlp
+
+global_spacy_nlp = spacy.load("en_core_web_trf")
+global_entities_dict = None
+f = open("/home/fzus/lyh/entity_en.json", 'r', encoding='UTF-8')
+entities_dict = json.load(f)
+global_entities_dict = DataDict(entities_dict)
+
 
 
 def map_state_to_ids(slot_state, slot_meta, slot_ans):
@@ -221,6 +230,8 @@ global_isfilter = False
 global_split = True
 global_turn = 0
 
+
+
 # todo 在这里扩展语句
 def process_dial_dict(dial_dict, if_train):
     datas = []
@@ -253,7 +264,8 @@ def process_dial_dict(dial_dict, if_train):
         turn_id = turn["turn_idx"]
         # TODO： 在这里对系统话语与用户话语进行扩充与拼接拼接，或者只对用户话语进行扩展
         text = turn["system_transcript"] + ' ; ' + turn["transcript"]
-        turn_uttr = (expend_sentence(text=text, spacy_nlp=nlp, data=entities_dict, focus=['IsA'], pos=['NOUN'])).strip()
+        turn_uttr = text.strip()
+        # turn_uttr = (expend_sentence(text=text, spacy_nlp=global_spacy_nlp, data=global_entities_dict, focus=['IsA'], pos=['NOUN'])).strip()
         dialog_history.append(last_uttr)
         turn_dialog_state = fix_general_label_error(turn["belief_state"], False, global_slot_meta)
         sample_ids = dial_dict["dialogue_idx"] + "_" + str(turn_id)
@@ -403,9 +415,11 @@ def prepare_dataset(data_path, tokenizer, slot_meta,
     global_slot_ans = slot_ans
     global_isfilter = isfilter
     global_turn = turn
+
+
     if op_data_path is not None:
         with open(op_data_path, 'r') as f:
-            global_pred_op = json.load(f)
+            global_pred_op = json.load(f, strict=False)
     datas = []
     dials = json.load(open(data_path)) # 读取json文件
     # for d in dials:
@@ -482,6 +496,7 @@ class TrainingInstance:
         self.is_last_turn = is_last_turn
         self.gold_ans_label = gold_ans_label
         self.op2id = OP_SET[op_code]
+        # self.nlp = spacy.load('en_core_web_trf')
 
     def shuffle_state(self, rng, slot_meta=None):
         # don't fix
@@ -538,6 +553,9 @@ class TrainingInstance:
             diag_2 = tokenizer.tokenize(self.turn_utter)
             avail_length = avail_length_1 - len(diag_2)
 
+            # turn_doc = self.nlp(self.turn_utter)
+            
+
             if len(diag_1) > avail_length:  # truncated
                 avail_length = len(diag_1) - avail_length
                 diag_1 = diag_1[avail_length:]
@@ -577,6 +595,7 @@ class TrainingInstance:
 
         input_mask = [1] * len(self.input_)
         self.input_id = tokenizer.convert_tokens_to_ids(self.input_)
+        # some work for padding
         if len(input_mask) < max_seq_length:
             self.input_id = self.input_id + [0] * (max_seq_length - len(input_mask))
             self.segment_id = self.segment_id + [0] * (max_seq_length - len(input_mask))
