@@ -1,15 +1,3 @@
-DiCoS-DST
-==========
-
-This paper/code introduces the **Beyond the Granularity: Multi-Perspective Dialogue Collaborative Selection for Dialogue State Tracking(DiCoS-DST)**
-
-You can find the paper [here](https://aclanthology.org/2022.acl-long.165/)
-
-See below for an overview of the model architecture:
-
-![DiCoS-DST Architecture](Arch.png "DiCoS-DST Architecture")
-
-
 ## Requirements
 
 Our model was trained on GPU Tesla P40 of Nvidia DGX.  
@@ -119,27 +107,3 @@ sh eval_model.sh
 
 ## hint
 The process of dialogue selection is a discrete process, so we multiply the score of the selected dialogue by the representation of the selected dialogue to ensure the integrality of calculation graph
-
-## Contact
-
-If you have any questions, you can contact Jinyu Guo(guojinyu@bupt.edu.cn), Jijie Li (lijijie@bupt.edu.cn) and Yixuan Liu(liuyixuan@bupt.edu.cn).
-
-
-## Citation
-
-```
-@inproceedings{guo-etal-2022-beyond,
-    title = "Beyond the Granularity: Multi-Perspective Dialogue Collaborative Selection for Dialogue State Tracking",
-    author = "Guo, Jinyu  and
-      Shuang, Kai  and
-      Li, Jijie  and
-      Wang, Zihan  and
-      Liu, Yixuan",
-    booktitle = "Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)",
-    month = may,
-    year = "2022",
-    address = "Dublin, Ireland",
-    publisher = "Association for Computational Linguistics",
-    url = "https://aclanthology.org/2022.acl-long.165",
-    pages = "2320--2332",
-```
